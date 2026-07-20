@@ -17,12 +17,36 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _tab = 0;
 
-  Widget _body() => switch (_tab) {
+  // Each tab gets its own nested Navigator so that pushing a detail / browser
+  // route stays inside the content area — the rail (or bottom nav) persists
+  // instead of being overlaid — and each tab keeps its own navigation stack.
+  final Map<int, GlobalKey<NavigatorState>> _navKeys = {};
+
+  GlobalKey<NavigatorState> _navKey(int tab) =>
+      _navKeys.putIfAbsent(tab, () => GlobalKey<NavigatorState>());
+
+  Widget _rootFor(int tab) => switch (tab) {
         0 => const DocumentListScreen(),
         1 => const SearchScreen(),
         2 => const IndexListScreen(),
         _ => const AdminScreen(),
       };
+
+  Widget _tabNavigator(int tab) => Navigator(
+        key: _navKey(tab),
+        onGenerateRoute: (settings) =>
+            MaterialPageRoute(builder: (_) => _rootFor(tab)),
+      );
+
+  void _onDestinationSelected(int i) {
+    // Re-tapping the active tab pops it back to its root, matching the usual
+    // bottom-nav / rail convention.
+    if (i == _tab) {
+      _navKey(i).currentState?.popUntil((r) => r.isFirst);
+    } else {
+      setState(() => _tab = i);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,13 +69,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onPressed: () => ref.read(sessionProvider.notifier).logout(),
     );
 
+    final body = IndexedStack(
+      index: _tab,
+      children: [
+        for (var i = 0; i < destinations.length; i++) _tabNavigator(i),
+      ],
+    );
+
+    // Route the system/back button to the active tab's nested Navigator first,
+    // so it pops the pushed detail route rather than exiting the shell.
+    final content = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _navKey(_tab).currentState?.maybePop();
+      },
+      child: body,
+    );
+
     if (wide) {
       return Scaffold(
         body: Row(
           children: [
             NavigationRail(
               selectedIndex: _tab,
-              onDestinationSelected: (i) => setState(() => _tab = i),
+              onDestinationSelected: _onDestinationSelected,
               labelType: NavigationRailLabelType.all,
               leading: const SizedBox(height: 8),
               trailing: Expanded(
@@ -72,17 +114,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
             ),
             const VerticalDivider(width: 1),
-            Expanded(child: _body()),
+            Expanded(child: content),
           ],
         ),
       );
     }
 
     return Scaffold(
-      body: _body(),
+      body: content,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: _onDestinationSelected,
         destinations: [
           for (final d in destinations)
             NavigationDestination(icon: Icon(d.icon), label: d.label),

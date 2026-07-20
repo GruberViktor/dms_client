@@ -167,6 +167,7 @@ class DocumentVersion {
   final DateTime uploadedAt;
   final DateTime? objectLockUntil;
   final int? pageCount;
+  final String? consoleUrl;
 
   DocumentVersion({
     required this.number,
@@ -184,6 +185,7 @@ class DocumentVersion {
     required this.uploadedAt,
     required this.objectLockUntil,
     required this.pageCount,
+    required this.consoleUrl,
   });
 
   factory DocumentVersion.fromJson(Map<String, dynamic> json) =>
@@ -208,6 +210,7 @@ class DocumentVersion {
             ? DateTime.tryParse(json['object_lock_until'] as String)
             : null,
         pageCount: (json['page_count'] as num?)?.toInt(),
+        consoleUrl: json['console_url'] as String?,
       );
 }
 

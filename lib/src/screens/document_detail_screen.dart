@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
@@ -73,10 +74,13 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   /// Poll while any visible version is pending/running OCR (spec §3).
   void _schedulePollIfExtracting() {
     _pollTimer?.cancel();
-    final extracting = _doc?.versions.any((v) =>
-            !v.isHidden &&
-            (v.extractionStatus == ExtractionStatus.pending ||
-                v.extractionStatus == ExtractionStatus.running)) ??
+    final extracting =
+        _doc?.versions.any(
+          (v) =>
+              !v.isHidden &&
+              (v.extractionStatus == ExtractionStatus.pending ||
+                  v.extractionStatus == ExtractionStatus.running),
+        ) ??
         false;
     if (extracting) {
       _pollTimer = Timer(const Duration(seconds: 4), _load);
@@ -184,8 +188,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       final safeName = v.originalFilename.isNotEmpty
           ? v.originalFilename.replaceAll(RegExp(r'[/\\]'), '_')
           : 'document';
-      final file = File(
-          '${dir.path}/dms/${doc.uuid}/v${v.number}/$safeName');
+      final file = File('${dir.path}/dms/${doc.uuid}/v${v.number}/$safeName');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
       final result = await OpenFilex.open(file.path);
@@ -210,9 +213,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   }
 
   Future<void> _editDocument() async {
-    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => EditDocumentScreen(document: _doc!),
-    ));
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => EditDocumentScreen(document: _doc!)),
+    );
     if (changed == true) _load();
   }
 
@@ -228,16 +231,17 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     return MultipartFile.fromBytes(bytes, filename: f.name);
   }
 
-  Future<void> _uploadNewVersion({MultipartFile? file, bool force = false}) async {
+  Future<void> _uploadNewVersion({
+    MultipartFile? file,
+    bool force = false,
+  }) async {
     final picked = file ?? await _pickMultipart();
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref.read(apiProvider).uploadVersion(
-            _doc!.uuid,
-            picked,
-            force: force,
-          );
+      await ref
+          .read(apiProvider)
+          .uploadVersion(_doc!.uuid, picked, force: force);
       if (mounted) showSnack(context, 'New version uploaded.');
       await _load();
     } on ApiException catch (e) {
@@ -270,13 +274,17 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             for (final uuid in e.duplicateOf)
               TextButton.icon(
                 icon: const Icon(Icons.open_in_new, size: 16),
-                label: Text(uuid,
-                    style: const TextStyle(fontFamily: 'monospace')),
+                label: Text(
+                  uuid,
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
                 onPressed: () {
                   Navigator.pop(context);
-                  Navigator.of(this.context).push(MaterialPageRoute(
-                    builder: (_) => DocumentDetailScreen(uuid: uuid),
-                  ));
+                  Navigator.of(this.context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DocumentDetailScreen(uuid: uuid),
+                    ),
+                  );
                 },
               ),
           ],
@@ -313,8 +321,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-                'The version stays stored but is struck through in the '
-                'timeline and no longer counts as "the document".'),
+              'The version stays stored but is struck through in the '
+              'timeline and no longer counts as "the document".',
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: reasonCtrl,
@@ -343,7 +352,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     reasonCtrl.dispose();
     if (confirmed != true || !mounted) return;
     try {
-      await ref.read(apiProvider).hideVersion(
+      await ref
+          .read(apiProvider)
+          .hideVersion(
             _doc!.uuid,
             v.number,
             reason: reason.isEmpty ? null : reason,
@@ -377,7 +388,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   /// Change the document type (409s in compliance mode; not offered there).
   Future<void> _changeType() async {
     final doc = _doc!;
-    final types = ref.read(documentTypesProvider).value ?? const <DocumentType>[];
+    final types =
+        ref.read(documentTypesProvider).value ?? const <DocumentType>[];
     String? selected;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -391,8 +403,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               border: OutlineInputBorder(),
             ),
             items: [
-              for (final t in types
-                  .where((t) => t.isActive && t.slug != doc.documentType))
+              for (final t in types.where(
+                (t) => t.isActive && t.slug != doc.documentType,
+              ))
                 DropdownMenuItem(
                   value: t.slug,
                   child: Text('${'    ' * t.depth}${t.name}'),
@@ -423,8 +436,10 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       if (e.isComplianceLocked) {
         _showComplianceDialog();
       } else if (e.isInvalidMetadata) {
-        showSnack(context,
-            '${e.detail} — adjust the metadata first, then change the type.');
+        showSnack(
+          context,
+          '${e.detail} — adjust the metadata first, then change the type.',
+        );
       } else {
         if (e.isForbidden) _recordDenied('edit_metadata');
         showSnack(context, e.detail);
@@ -438,8 +453,10 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     try {
       await ref.read(editSessionsProvider.notifier).start(_doc!, v);
       if (mounted) {
-        showSnack(context,
-            'Opened ${v.originalFilename} — watching for changes.');
+        showSnack(
+          context,
+          'Opened ${v.originalFilename} — watching for changes.',
+        );
       }
     } on ApiException catch (e) {
       if (e.isForbidden) _recordDenied('download');
@@ -493,8 +510,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       builder: (context) => AlertDialog(
         title: Text('Replace file of version ${v.number}?'),
         content: const Text(
-            'The stored bytes will be overwritten in place. To keep history, '
-            'upload a new version instead.'),
+          'The stored bytes will be overwritten in place. To keep history, '
+          'upload a new version instead.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -573,8 +591,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           doc: doc,
           onDownload: _busy ? null : _downloadAndOpen,
           onOpenEdit: (_busy || !_isDesktop) ? null : _openAndEdit,
-          onUploadVersion:
-              (_busy || !canUpload) ? null : () => _uploadNewVersion(),
+          onUploadVersion: (_busy || !canUpload)
+              ? null
+              : () => _uploadNewVersion(),
           // Replace-in-place is never offered in compliance mode (§3).
           onReplaceFile: (_busy || doc.inComplianceMode || !canUpload)
               ? null
@@ -591,8 +610,10 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Timeline',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Timeline',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 12),
                 if (_events == null)
                   const Text('Timeline not available.')
@@ -640,9 +661,11 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             ),
           IconButton(
             tooltip: doc.archived ? 'Unarchive' : 'Archive',
-            icon: Icon(doc.archived
-                ? Icons.unarchive_outlined
-                : Icons.inventory_2_outlined),
+            icon: Icon(
+              doc.archived
+                  ? Icons.unarchive_outlined
+                  : Icons.inventory_2_outlined,
+            ),
             onPressed: _busy ? null : _toggleArchive,
           ),
           // In compliance mode the server 409s deletes — don't offer the
@@ -701,8 +724,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  if (current != null)
-                    SizedBox(height: 420, child: preview),
+                  if (current != null) SizedBox(height: 420, child: preview),
                   const SizedBox(height: 12),
                   infoColumn,
                 ],
@@ -727,31 +749,33 @@ class _MetadataCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fieldDefs = {
-      for (final f in mergedMetadataFields(bySlug, doc.documentType))
-        f.key: f,
+      for (final f in mergedMetadataFields(bySlug, doc.documentType)) f.key: f,
     };
-    final extracting = doc.versions.any((v) =>
-        !v.isHidden &&
-        (v.extractionStatus == ExtractionStatus.pending ||
-            v.extractionStatus == ExtractionStatus.running));
+    final extracting = doc.versions.any(
+      (v) =>
+          !v.isHidden &&
+          (v.extractionStatus == ExtractionStatus.pending ||
+              v.extractionStatus == ExtractionStatus.running),
+    );
 
     Widget row(String label, Widget value) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 140,
-                child: Text(
-                  label,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              Expanded(child: value),
-            ],
+            ),
           ),
-        );
+          Expanded(child: value),
+        ],
+      ),
+    );
 
     Widget textRow(String label, String value) =>
         row(label, Text(value, style: theme.textTheme.bodyMedium));
@@ -766,8 +790,7 @@ class _MetadataCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child:
-                      Text('Details', style: theme.textTheme.titleMedium),
+                  child: Text('Details', style: theme.textTheme.titleMedium),
                 ),
                 if (extracting)
                   Row(
@@ -779,9 +802,12 @@ class _MetadataCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                       const SizedBox(width: 6),
-                      Text('processing…',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant)),
+                      Text(
+                        'processing…',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
               ],
@@ -876,9 +902,9 @@ class _EditSessionBanner extends StatelessWidget {
                     uploading
                         ? 'Uploading ${session.fileName}…'
                         : changed
-                            ? '${session.fileName} changed on disk'
-                            : 'Editing v${session.versionNumber} — watching '
-                                '${session.fileName} for changes',
+                        ? '${session.fileName} changed on disk'
+                        : 'Editing v${session.versionNumber} — watching '
+                              '${session.fileName} for changes',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -894,10 +920,10 @@ class _EditSessionBanner extends StatelessWidget {
               Text(
                 session.compliance
                     ? 'This document is under retention: the change can only '
-                        'be uploaded as version ${session.versionNumber + 1}.'
+                          'be uploaded as version ${session.versionNumber + 1}.'
                     : 'Upload the change as version '
-                        '${session.versionNumber + 1}, or overwrite the file '
-                        'of version ${session.versionNumber} in place.',
+                          '${session.versionNumber + 1}, or overwrite the file '
+                          'of version ${session.versionNumber} in place.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 10),
@@ -908,15 +934,13 @@ class _EditSessionBanner extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: canUpload ? onUploadNewVersion : null,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: Text(
-                        'Upload as v${session.versionNumber + 1}'),
+                    label: Text('Upload as v${session.versionNumber + 1}'),
                   ),
                   if (!session.compliance)
                     OutlinedButton.icon(
                       onPressed: canUpload ? onReplaceFile : null,
                       icon: const Icon(Icons.find_replace, size: 18),
-                      label: Text(
-                          'Replace file in v${session.versionNumber}'),
+                      label: Text('Replace file in v${session.versionNumber}'),
                     ),
                 ],
               ),
@@ -966,8 +990,7 @@ class _VersionsCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child:
-                      Text('Versions', style: theme.textTheme.titleMedium),
+                  child: Text('Versions', style: theme.textTheme.titleMedium),
                 ),
                 if (onUploadVersion != null)
                   FilledButton.tonalIcon(
@@ -992,20 +1015,20 @@ class _VersionsCard extends StatelessWidget {
                   'v${v.number} · ${v.originalFilename}',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    decoration:
-                        v.isHidden ? TextDecoration.lineThrough : null,
+                    decoration: v.isHidden ? TextDecoration.lineThrough : null,
                     color: v.isHidden ? theme.colorScheme.outline : null,
-                    fontWeight:
-                        v.number == currentNumber ? FontWeight.w600 : null,
+                    fontWeight: v.number == currentNumber
+                        ? FontWeight.w600
+                        : null,
                   ),
                 ),
                 subtitle: Text(
                   v.isHidden
                       ? 'Hidden${v.hiddenBy != null ? ' by ${v.hiddenBy}' : ''}'
-                          '${(v.hiddenReason?.isNotEmpty ?? false) ? ': ${v.hiddenReason}' : ''}'
+                            '${(v.hiddenReason?.isNotEmpty ?? false) ? ': ${v.hiddenReason}' : ''}'
                       : '${formatBytes(v.size)} · ${v.uploadedBy}'
-                          ' · ${formatDateTime(v.uploadedAt)}'
-                          '${v.extractionStatus == ExtractionStatus.failed ? ' · OCR failed' : ''}',
+                            ' · ${formatDateTime(v.uploadedAt)}'
+                            '${v.extractionStatus == ExtractionStatus.failed ? ' · OCR failed' : ''}',
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Row(
@@ -1027,15 +1050,21 @@ class _VersionsCard extends StatelessWidget {
                       IconButton(
                         tooltip: 'Download & open',
                         icon: const Icon(Icons.file_download_outlined),
-                        onPressed:
-                            onDownload != null ? () => onDownload!(v) : null,
+                        onPressed: onDownload != null
+                            ? () => onDownload!(v)
+                            : null,
                       ),
                     ],
-                    if (v.isHidden
-                        ? onUnhide != null
-                        : (onHide != null || onReExtract != null))
+                    if ((v.consoleUrl != null && v.consoleUrl!.isNotEmpty) ||
+                        (v.isHidden
+                            ? onUnhide != null
+                            : (onHide != null || onReExtract != null)))
                       PopupMenuButton<String>(
                         onSelected: (action) => switch (action) {
+                          'console' => launchUrl(
+                            Uri.parse(v.consoleUrl!),
+                            mode: LaunchMode.externalApplication,
+                          ),
                           'hide' => onHide!(v),
                           'unhide' => onUnhide!(v),
                           're-extract' => onReExtract!(v),
@@ -1074,6 +1103,16 @@ class _VersionsCard extends StatelessWidget {
                                 ),
                               ),
                           ],
+                          if (v.consoleUrl != null && v.consoleUrl!.isNotEmpty)
+                            const PopupMenuItem(
+                              value: 'console',
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.open_in_new),
+                                title: Text('Open in console'),
+                              ),
+                            ),
                         ],
                       ),
                   ],
@@ -1151,14 +1190,16 @@ class _PreviewPagerState extends State<_PreviewPager> {
                     // Lazy pages may take ~1s to render server-side.
                     loadingBuilder: (context, child, progress) =>
                         progress == null
-                            ? child
-                            : const Center(
-                                child: CircularProgressIndicator()),
+                        ? child
+                        : const Center(child: CircularProgressIndicator()),
                     errorBuilder: (context, e, st) => Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(mimeIcon(widget.version.mimeType),
-                            size: 64, color: scheme.onSurfaceVariant),
+                        Icon(
+                          mimeIcon(widget.version.mimeType),
+                          size: 64,
+                          color: scheme.onSurfaceVariant,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           'No preview for this format.\nUse "Download & open".',
@@ -1183,9 +1224,9 @@ class _PreviewPagerState extends State<_PreviewPager> {
                   icon: const Icon(Icons.chevron_left),
                   onPressed: _page > 1
                       ? () => _controller.previousPage(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                          )
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                        )
                       : null,
                 ),
                 Text('$_page / $_pageCount'),
@@ -1193,9 +1234,9 @@ class _PreviewPagerState extends State<_PreviewPager> {
                   icon: const Icon(Icons.chevron_right),
                   onPressed: _page < _pageCount
                       ? () => _controller.nextPage(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                          )
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                        )
                       : null,
                 ),
               ],
