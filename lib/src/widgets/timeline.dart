@@ -1,0 +1,464 @@
+import 'package:flutter/material.dart';
+
+import '../models/models.dart';
+import '../util/format.dart';
+import 'common.dart';
+
+/// Vertical audit/version timeline (client-specification.md §6).
+/// Version events are large anchor nodes; audit events smaller entries.
+/// view/download repeats are grouped ("viewed 5×").
+class DocumentTimeline extends StatelessWidget {
+  final List<TimelineEvent> events;
+
+  const DocumentTimeline({super.key, required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    if (events.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('No events.'),
+      );
+    }
+    // Newest first.
+    final sorted = [...events]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final entries = _groupViewDownload(sorted);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < entries.length; i++)
+          _TimelineRow(entry: entries[i], isLast: i == entries.length - 1),
+      ],
+    );
+  }
+
+  /// Collapse consecutive view/download audit events by the same actor on the
+  /// same day into one entry with a count.
+  static List<_Entry> _groupViewDownload(List<TimelineEvent> sorted) {
+    final entries = <_Entry>[];
+    for (final e in sorted) {
+      if (e is AuditEvent && (e.action == 'view' || e.action == 'download')) {
+        final last = entries.isNotEmpty ? entries.last : null;
+        if (last != null &&
+            last.event is AuditEvent &&
+            (last.event as AuditEvent).action == e.action &&
+            (last.event as AuditEvent).actor == e.actor &&
+            _sameDay(last.event.timestamp, e.timestamp)) {
+          last.repeat++;
+          continue;
+        }
+      }
+      entries.add(_Entry(e));
+    }
+    return entries;
+  }
+
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+class _Entry {
+  final TimelineEvent event;
+  int repeat = 1;
+  _Entry(this.event);
+}
+
+class _TimelineRow extends StatelessWidget {
+  final _Entry entry;
+  final bool isLast;
+
+  const _TimelineRow({required this.entry, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final e = entry.event;
+    final isVersion = e is VersionEvent;
+    final markerSize = isVersion ? 18.0 : 10.0;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                const SizedBox(height: 4),
+                Container(
+                  width: markerSize,
+                  height: markerSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isVersion
+                        ? (e.isHidden ? scheme.outlineVariant : scheme.primary)
+                        : scheme.outline,
+                    border: isVersion
+                        ? Border.all(color: scheme.primaryContainer, width: 3)
+                        : null,
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(width: 2, color: scheme.outlineVariant),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 4 : 16),
+              child: isVersion
+                  ? _VersionCard(event: e)
+                  : _AuditLine(event: e as AuditEvent, repeat: entry.repeat),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuditLine extends StatelessWidget {
+  final AuditEvent event;
+  final int repeat;
+
+  const _AuditLine({required this.event, required this.repeat});
+
+  static const _labels = {
+    'create': 'created the document',
+    'edit_metadata': 'edited metadata',
+    'edit_fields': 'edited fields',
+    'version_upload': 'uploaded a version',
+    'version_replace_file': 'replaced a version file',
+    'version_hide': 'hid a version',
+    'version_unhide': 'unhid a version',
+    'download': 'downloaded',
+    'view': 'viewed',
+    'archive': 'archived the document',
+    'unarchive': 'unarchived the document',
+    'type_change': 'changed the document type',
+    'extraction_done': 'text extraction finished',
+    'extraction_failed': 'text extraction failed',
+    'acl_change': 'changed permissions',
+  };
+
+  bool get _deEmphasized =>
+      event.action == 'view' || event.action == 'download';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final actor = event.actor ?? 'System';
+    var label = _labels[event.action] ?? event.action;
+    if (repeat > 1) {
+      label = event.action == 'view' ? 'viewed $repeat×' : 'downloaded $repeat×';
+    }
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text.rich(
+          TextSpan(children: [
+            TextSpan(
+              text: actor,
+              style: TextStyle(
+                fontWeight: _deEmphasized ? FontWeight.normal : FontWeight.w600,
+                fontStyle: event.actor == null ? FontStyle.italic : null,
+              ),
+            ),
+            TextSpan(text: ' $label'),
+          ]),
+          style: _deEmphasized
+              ? theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)
+              : theme.textTheme.bodyMedium,
+        ),
+        Text(formatDateTime(event.timestamp), style: muted),
+        if (event.changes != null && event.changes!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _ChangesTable(changes: event.changes!),
+          ),
+        if (event.action == 'extraction_failed' &&
+            event.context?['error'] != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('${event.context!['error']}',
+                style: muted?.copyWith(color: scheme.error)),
+          ),
+      ],
+    );
+  }
+}
+
+/// old → new per changed field.
+class _ChangesTable extends StatelessWidget {
+  final Map<String, dynamic> changes;
+
+  const _ChangesTable({required this.changes});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final small = theme.textTheme.bodySmall;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final e in changes.entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                      text: '${e.key}: ',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  TextSpan(
+                    text: _fmt(e.value is Map ? e.value['old'] : null),
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+                  const TextSpan(text: '  →  '),
+                  TextSpan(text: _fmt(e.value is Map ? e.value['new'] : e.value)),
+                ]),
+                style: small,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmt(Object? v) {
+    if (v == null) return '—';
+    if (v is String && v.isEmpty) return '—';
+    return '$v';
+  }
+}
+
+class _VersionCard extends StatelessWidget {
+  final VersionEvent event;
+
+  const _VersionCard({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final hidden = event.isHidden;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      decoration: hidden ? TextDecoration.lineThrough : null,
+      color: hidden ? scheme.onSurfaceVariant : null,
+    );
+
+    final card = Card(
+      margin: EdgeInsets.zero,
+      color: hidden ? scheme.surfaceContainerLow : scheme.surfaceContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(mimeIcon(event.mimeType),
+                    size: 20,
+                    color: hidden ? scheme.outline : scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Version ${event.number} · ${event.originalFilename}',
+                    style: titleStyle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (event.extractionStatus == ExtractionStatus.pending ||
+                    event.extractionStatus == ExtractionStatus.running)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${formatBytes(event.size)} · ${event.uploadedBy} · '
+              '${formatDateTime(event.timestamp)}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            if (hidden)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Hidden${event.hiddenBy != null ? ' by ${event.hiddenBy}' : ''}'
+                  '${(event.hiddenReason?.isNotEmpty ?? false) ? ': ${event.hiddenReason}' : ''}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            // No diff section for hidden versions.
+            if (!hidden && event.diff != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _DiffSection(diff: event.diff!),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (!hidden) return card;
+    return Tooltip(
+      message:
+          'Hidden${event.hiddenBy != null ? ' by ${event.hiddenBy}' : ''}'
+          '${(event.hiddenReason?.isNotEmpty ?? false) ? ' — ${event.hiddenReason}' : ''}',
+      child: card,
+    );
+  }
+}
+
+/// Collapsed "+N −M" chips; expands to the unified diff with +/− coloring.
+class _DiffSection extends StatefulWidget {
+  final VersionDiff diff;
+
+  const _DiffSection({required this.diff});
+
+  @override
+  State<_DiffSection> createState() => _DiffSectionState();
+}
+
+class _DiffSectionState extends State<_DiffSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final d = widget.diff;
+
+    if (d.tooLarge) {
+      return Text(
+        'diff not available (file too large)',
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: scheme.onSurfaceVariant),
+      );
+    }
+
+    final chips = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _chip(context, '+${d.addedLines}', Colors.green),
+        const SizedBox(width: 6),
+        _chip(context, '−${d.removedLines}', Colors.red),
+        const SizedBox(width: 6),
+        Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+            size: 18, color: scheme.onSurfaceVariant),
+        if (d.fromVersion != null)
+          Text(
+            '  vs v${d.fromVersion}',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: (d.unifiedDiff?.isNotEmpty ?? false)
+              ? () => setState(() => _expanded = !_expanded)
+              : null,
+          child: Padding(padding: const EdgeInsets.all(2), child: chips),
+        ),
+        if (_expanded && d.unifiedDiff != null)
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.all(10),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _UnifiedDiffText(diff: d.unifiedDiff!),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _chip(BuildContext context, String label, MaterialColor color) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: dark ? color.shade900.withValues(alpha: .5) : color.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: dark ? color.shade200 : color.shade800,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
+}
+
+class _UnifiedDiffText extends StatelessWidget {
+  final String diff;
+
+  const _UnifiedDiffText({required this.diff});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final mono = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 12,
+      height: 1.4,
+      color: Theme.of(context).colorScheme.onSurface,
+    );
+    final spans = <TextSpan>[];
+    for (final line in diff.split('\n')) {
+      Color? color;
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        color = dark ? Colors.green.shade300 : Colors.green.shade800;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        color = dark ? Colors.red.shade300 : Colors.red.shade800;
+      } else if (line.startsWith('@@')) {
+        color = dark ? Colors.blue.shade300 : Colors.blue.shade800;
+      }
+      spans.add(TextSpan(
+        text: '$line\n',
+        style: color != null ? mono.copyWith(color: color) : mono,
+      ));
+    }
+    return Text.rich(TextSpan(children: spans), style: mono);
+  }
+}

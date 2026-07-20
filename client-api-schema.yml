@@ -1,0 +1,2490 @@
+openapi: 3.0.3
+info:
+  title: DMS API
+  version: 1.0.0
+  description: Company document management system
+paths:
+  /api/v1/audit/:
+    get:
+      operationId: v1_audit_list
+      description: |-
+        Global audit browser (admin only). Per-document history is available to
+        normal users through the document timeline endpoint.
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+          enum:
+          - acl_change
+          - archive
+          - create
+          - delete
+          - download
+          - edit_fields
+          - edit_metadata
+          - extraction_done
+          - extraction_failed
+          - type_change
+          - unarchive
+          - version_hide
+          - version_replace_file
+          - version_unhide
+          - version_upload
+          - view
+        description: |-
+          * `create` - Create
+          * `edit_metadata` - Edit Metadata
+          * `edit_fields` - Edit Fields
+          * `version_upload` - Version Upload
+          * `version_replace_file` - Version Replace File
+          * `version_hide` - Version Hide
+          * `version_unhide` - Version Unhide
+          * `acl_change` - Acl Change
+          * `type_change` - Type Change
+          * `download` - Download
+          * `view` - View
+          * `archive` - Archive
+          * `unarchive` - Unarchive
+          * `delete` - Delete
+          * `extraction_done` - Extraction Done
+          * `extraction_failed` - Extraction Failed
+      - in: query
+        name: actor
+        schema:
+          type: integer
+      - in: query
+        name: document
+        schema:
+          type: integer
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+  /api/v1/audit/{id}/:
+    get:
+      operationId: v1_audit_retrieve
+      description: |-
+        Global audit browser (admin only). Per-document history is available to
+        normal users through the document timeline endpoint.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this audit log.
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+          description: ''
+  /api/v1/auth/login:
+    post:
+      operationId: v1_auth_login_create
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logout:
+    post:
+      operationId: v1_auth_logout_create
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logoutall:
+    post:
+      operationId: v1_auth_logoutall_create
+      description: |-
+        Log the user out of all sessions
+        I.E. deletes all auth tokens for the user
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me:
+    get:
+      operationId: v1_auth_me_retrieve
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/document-types/:
+    get:
+      operationId: v1_document_types_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentTypeList'
+          description: ''
+    post:
+      operationId: v1_document_types_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentType'
+          description: ''
+  /api/v1/document-types/{slug}/:
+    get:
+      operationId: v1_document_types_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentType'
+          description: ''
+    put:
+      operationId: v1_document_types_update
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentType'
+          description: ''
+    patch:
+      operationId: v1_document_types_partial_update
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentType'
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentType'
+          description: ''
+    delete:
+      operationId: v1_document_types_destroy
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/document-types/{slug}/acls/:
+    get:
+      operationId: v1_document_types_acls_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentType'
+          description: ''
+    put:
+      operationId: v1_document_types_acls_update
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentType'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentType'
+          description: ''
+  /api/v1/document-types/{type_slug}/metadata-fields/:
+    get:
+      operationId: v1_document_types_metadata_fields_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      - in: path
+        name: type_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMetadataFieldDefinitionList'
+          description: ''
+    post:
+      operationId: v1_document_types_metadata_fields_create
+      parameters:
+      - in: path
+        name: type_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetadataFieldDefinition'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MetadataFieldDefinition'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MetadataFieldDefinition'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetadataFieldDefinition'
+          description: ''
+  /api/v1/document-types/{type_slug}/metadata-fields/{id}/:
+    get:
+      operationId: v1_document_types_metadata_fields_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: type_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetadataFieldDefinition'
+          description: ''
+    patch:
+      operationId: v1_document_types_metadata_fields_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: type_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMetadataFieldDefinition'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMetadataFieldDefinition'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMetadataFieldDefinition'
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetadataFieldDefinition'
+          description: ''
+    delete:
+      operationId: v1_document_types_metadata_fields_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: type_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/documents/:
+    get:
+      operationId: v1_documents_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentDetailList'
+          description: ''
+    post:
+      operationId: v1_documents_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/:
+    get:
+      operationId: v1_documents_versions_list
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentVersionList'
+          description: ''
+    post:
+      operationId: v1_documents_versions_create
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/:
+    get:
+      operationId: v1_documents_versions_retrieve
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/diff/{other}:
+    get:
+      operationId: v1_documents_versions_diff_retrieve
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: other
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/download:
+    get:
+      operationId: v1_documents_versions_download_retrieve
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/file:
+    put:
+      operationId: v1_documents_versions_file_update
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/hide:
+    post:
+      operationId: v1_documents_versions_hide_create
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/preview:
+    get:
+      operationId: v1_documents_versions_preview_retrieve
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/re-extract:
+    post:
+      operationId: v1_documents_versions_re_extract_create
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{document_uuid}/versions/{number}/unhide:
+    post:
+      operationId: v1_documents_versions_unhide_create
+      description: |-
+        Nested under /documents/{uuid}/versions/. The version lookup key is the
+        version *number*, not a pk.
+      parameters:
+      - in: path
+        name: document_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: number
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentVersion'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersion'
+          description: ''
+  /api/v1/documents/{uuid}/:
+    get:
+      operationId: v1_documents_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+    patch:
+      operationId: v1_documents_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentDetail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentDetail'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentDetail'
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+    delete:
+      operationId: v1_documents_destroy
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/documents/{uuid}/archive/:
+    post:
+      operationId: v1_documents_archive_create
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+  /api/v1/documents/{uuid}/change-type/:
+    post:
+      operationId: v1_documents_change_type_create
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+  /api/v1/documents/{uuid}/preview/:
+    get:
+      operationId: v1_documents_preview_retrieve
+      description: Preview of the latest visible version (convenience for lists).
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+  /api/v1/documents/{uuid}/timeline/:
+    get:
+      operationId: v1_documents_timeline_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+  /api/v1/documents/{uuid}/unarchive/:
+    post:
+      operationId: v1_documents_unarchive_create
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentDetail'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetail'
+          description: ''
+  /api/v1/indexes/:
+    get:
+      operationId: v1_indexes_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIndexList'
+          description: ''
+    post:
+      operationId: v1_indexes_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Index'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Index'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Index'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+          description: ''
+  /api/v1/indexes/{slug}/:
+    get:
+      operationId: v1_indexes_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+          description: ''
+    put:
+      operationId: v1_indexes_update
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Index'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Index'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Index'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+          description: ''
+    patch:
+      operationId: v1_indexes_partial_update
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedIndex'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedIndex'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedIndex'
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+          description: ''
+    delete:
+      operationId: v1_indexes_destroy
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/indexes/{slug}/nodes/:
+    get:
+      operationId: v1_indexes_nodes_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+          description: ''
+  /api/v1/retention-policies/:
+    get:
+      operationId: v1_retention_policies_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRetentionPolicyList'
+          description: ''
+    post:
+      operationId: v1_retention_policies_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetentionPolicy'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RetentionPolicy'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RetentionPolicy'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionPolicy'
+          description: ''
+  /api/v1/retention-policies/{id}/:
+    get:
+      operationId: v1_retention_policies_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this retention policy.
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionPolicy'
+          description: ''
+    put:
+      operationId: v1_retention_policies_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this retention policy.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetentionPolicy'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RetentionPolicy'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RetentionPolicy'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionPolicy'
+          description: ''
+    patch:
+      operationId: v1_retention_policies_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this retention policy.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRetentionPolicy'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRetentionPolicy'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRetentionPolicy'
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionPolicy'
+          description: ''
+    delete:
+      operationId: v1_retention_policies_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this retention policy.
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/search/:
+    get:
+      operationId: v1_search_retrieve
+      description: |-
+        Full-text search over title, metadata, notes and extracted content,
+        ACL-filtered. ?q=...&type=<slug>&archived=true|only&limit=&offset=
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/storages/:
+    get:
+      operationId: v1_storages_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStorageList'
+          description: ''
+    post:
+      operationId: v1_storages_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Storage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Storage'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Storage'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Storage'
+          description: ''
+  /api/v1/storages/{id}/:
+    get:
+      operationId: v1_storages_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this storage.
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Storage'
+          description: ''
+    put:
+      operationId: v1_storages_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this storage.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Storage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Storage'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Storage'
+        required: true
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Storage'
+          description: ''
+    patch:
+      operationId: v1_storages_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this storage.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStorage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedStorage'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedStorage'
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Storage'
+          description: ''
+    delete:
+      operationId: v1_storages_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this storage.
+        required: true
+      tags:
+      - v1
+      security:
+      - knoxApiToken: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - create
+      - edit_metadata
+      - edit_fields
+      - version_upload
+      - version_replace_file
+      - version_hide
+      - version_unhide
+      - acl_change
+      - type_change
+      - download
+      - view
+      - archive
+      - unarchive
+      - delete
+      - extraction_done
+      - extraction_failed
+      type: string
+      description: |-
+        * `create` - Create
+        * `edit_metadata` - Edit Metadata
+        * `edit_fields` - Edit Fields
+        * `version_upload` - Version Upload
+        * `version_replace_file` - Version Replace File
+        * `version_hide` - Version Hide
+        * `version_unhide` - Version Unhide
+        * `acl_change` - Acl Change
+        * `type_change` - Type Change
+        * `download` - Download
+        * `view` - View
+        * `archive` - Archive
+        * `unarchive` - Unarchive
+        * `delete` - Delete
+        * `extraction_done` - Extraction Done
+        * `extraction_failed` - Extraction Failed
+    AnchorEnum:
+      enum:
+      - document_date
+      - date_added
+      type: string
+      description: |-
+        * `document_date` - Document Date
+        * `date_added` - Date Added
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        actor:
+          type: string
+        document:
+          type: string
+          format: uuid
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        changes:
+          nullable: true
+        context: {}
+      required:
+      - action
+      - id
+      - timestamp
+    BackendEnum:
+      enum:
+      - filesystem
+      - s3
+      type: string
+      description: |-
+        * `filesystem` - Filesystem
+        * `s3` - S3
+    BlankEnum:
+      enum:
+      - ''
+    DefaultLockModeEnum:
+      enum:
+      - COMPLIANCE
+      - GOVERNANCE
+      type: string
+      description: |-
+        * `COMPLIANCE` - Compliance
+        * `GOVERNANCE` - Governance
+    DocumentDetail:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        document_type:
+          type: string
+          readOnly: true
+        document_date:
+          type: string
+          format: date
+          nullable: true
+        date_added:
+          type: string
+          format: date-time
+          readOnly: true
+        added_by:
+          type: string
+          readOnly: true
+        metadata: {}
+        archived:
+          type: string
+          readOnly: true
+        retention_until:
+          type: string
+          format: date
+          nullable: true
+        in_compliance_mode:
+          type: boolean
+          readOnly: true
+        notes:
+          type: string
+        content:
+          type: string
+        mime_type:
+          type: string
+          readOnly: true
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentVersion'
+          readOnly: true
+      required:
+      - added_by
+      - archived
+      - date_added
+      - document_type
+      - in_compliance_mode
+      - mime_type
+      - title
+      - uuid
+      - versions
+    DocumentType:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        parent:
+          type: string
+          writeOnly: true
+          nullable: true
+        parent_slug:
+          type: string
+          readOnly: true
+        depth:
+          type: integer
+          readOnly: true
+        retention_policy:
+          type: integer
+          nullable: true
+        storage:
+          type: integer
+          nullable: true
+        stop_acl_inheritance:
+          type: boolean
+        is_active:
+          type: boolean
+        metadata_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetadataFieldDefinition'
+          readOnly: true
+      required:
+      - depth
+      - id
+      - metadata_fields
+      - name
+      - parent_slug
+      - slug
+    DocumentVersion:
+      type: object
+      properties:
+        number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        original_filename:
+          type: string
+          maxLength: 255
+        mime_type:
+          type: string
+          maxLength: 255
+        size:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        checksum_sha256:
+          type: string
+          maxLength: 64
+        extraction_status:
+          $ref: '#/components/schemas/ExtractionStatusEnum'
+        extraction_backend:
+          type: string
+          maxLength: 100
+        is_hidden:
+          type: boolean
+        hidden_by:
+          type: string
+          readOnly: true
+        hidden_at:
+          type: string
+          format: date-time
+          nullable: true
+        hidden_reason:
+          type: string
+          maxLength: 255
+        uploaded_by:
+          type: string
+          readOnly: true
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        object_lock_until:
+          type: string
+          format: date-time
+          nullable: true
+        page_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+      required:
+      - checksum_sha256
+      - hidden_by
+      - mime_type
+      - number
+      - original_filename
+      - size
+      - uploaded_at
+      - uploaded_by
+    ExtractionStatusEnum:
+      enum:
+      - pending
+      - running
+      - done
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `running` - Running
+        * `done` - Done
+        * `failed` - Failed
+    FieldTypeEnum:
+      enum:
+      - date
+      - float
+      - integer
+      - url
+      - monetary
+      - bool
+      - text
+      type: string
+      description: |-
+        * `date` - Date
+        * `float` - Float
+        * `integer` - Integer
+        * `url` - Url
+        * `monetary` - Monetary
+        * `bool` - Bool
+        * `text` - Text
+    Index:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        root_document_type:
+          type: string
+          nullable: true
+        shared:
+          type: boolean
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexLevel'
+      required:
+      - id
+      - levels
+      - name
+      - slug
+    IndexLevel:
+      type: object
+      properties:
+        position:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        source_key:
+          description: metadata key when source=metadata
+          oneOf:
+          - type: string
+            maxLength: 50
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+        transform:
+          $ref: '#/components/schemas/TransformEnum'
+        descending:
+          type: boolean
+      required:
+      - position
+      - source
+    MetadataFieldDefinition:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+          pattern: ^[-a-zA-Z0-9_]+$
+        label:
+          type: string
+          maxLength: 100
+        field_type:
+          $ref: '#/components/schemas/FieldTypeEnum'
+        required:
+          type: boolean
+        default:
+          nullable: true
+        ordering:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        indexed:
+          type: boolean
+          description: Create a functional DB index for tree views / sorting
+      required:
+      - field_type
+      - id
+      - key
+      - label
+    NullEnum:
+      enum:
+      - null
+    PaginatedAuditLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    PaginatedDocumentDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentDetail'
+    PaginatedDocumentTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentType'
+    PaginatedDocumentVersionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentVersion'
+    PaginatedIndexList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Index'
+    PaginatedMetadataFieldDefinitionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetadataFieldDefinition'
+    PaginatedRetentionPolicyList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RetentionPolicy'
+    PaginatedStorageList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Storage'
+    PatchedDocumentDetail:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        document_type:
+          type: string
+          readOnly: true
+        document_date:
+          type: string
+          format: date
+          nullable: true
+        date_added:
+          type: string
+          format: date-time
+          readOnly: true
+        added_by:
+          type: string
+          readOnly: true
+        metadata: {}
+        archived:
+          type: string
+          readOnly: true
+        retention_until:
+          type: string
+          format: date
+          nullable: true
+        in_compliance_mode:
+          type: boolean
+          readOnly: true
+        notes:
+          type: string
+        content:
+          type: string
+        mime_type:
+          type: string
+          readOnly: true
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentVersion'
+          readOnly: true
+    PatchedDocumentType:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        parent:
+          type: string
+          writeOnly: true
+          nullable: true
+        parent_slug:
+          type: string
+          readOnly: true
+        depth:
+          type: integer
+          readOnly: true
+        retention_policy:
+          type: integer
+          nullable: true
+        storage:
+          type: integer
+          nullable: true
+        stop_acl_inheritance:
+          type: boolean
+        is_active:
+          type: boolean
+        metadata_fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetadataFieldDefinition'
+          readOnly: true
+    PatchedIndex:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        root_document_type:
+          type: string
+          nullable: true
+        shared:
+          type: boolean
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexLevel'
+    PatchedMetadataFieldDefinition:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+          pattern: ^[-a-zA-Z0-9_]+$
+        label:
+          type: string
+          maxLength: 100
+        field_type:
+          $ref: '#/components/schemas/FieldTypeEnum'
+        required:
+          type: boolean
+        default:
+          nullable: true
+        ordering:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        indexed:
+          type: boolean
+          description: Create a functional DB index for tree views / sorting
+    PatchedRetentionPolicy:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        retention_years:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: null = no compliance / freely editable
+        anchor:
+          $ref: '#/components/schemas/AnchorEnum'
+        is_compliance:
+          type: boolean
+          readOnly: true
+    PatchedStorage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        backend:
+          $ref: '#/components/schemas/BackendEnum'
+        config: {}
+        object_lock_enabled:
+          type: boolean
+        default_lock_mode:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/DefaultLockModeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        read_only:
+          type: boolean
+        is_default:
+          type: boolean
+        is_active:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    RetentionPolicy:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        retention_years:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: null = no compliance / freely editable
+        anchor:
+          $ref: '#/components/schemas/AnchorEnum'
+        is_compliance:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_compliance
+      - name
+    SourceEnum:
+      enum:
+      - metadata
+      - document_date
+      - document_type
+      - added_by
+      type: string
+      description: |-
+        * `metadata` - Metadata
+        * `document_date` - Document Date
+        * `document_type` - Document Type
+        * `added_by` - Added By
+    Storage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        backend:
+          $ref: '#/components/schemas/BackendEnum'
+        config: {}
+        object_lock_enabled:
+          type: boolean
+        default_lock_mode:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/DefaultLockModeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        read_only:
+          type: boolean
+        is_default:
+          type: boolean
+        is_active:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - backend
+      - id
+      - name
+      - slug
+      - updated_at
+    TransformEnum:
+      enum:
+      - none
+      - year
+      - year_month
+      - first_letter
+      type: string
+      description: |-
+        * `none` - None
+        * `year` - Year
+        * `year_month` - Year Month
+        * `first_letter` - First Letter
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    knoxApiToken:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"
