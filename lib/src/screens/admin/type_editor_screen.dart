@@ -238,6 +238,17 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
     final types = ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
     final isNew = widget.existing == null;
 
+    // Guard the dropdown values against async-loaded item lists: feeding a
+    // value with no matching (or duplicate) DropdownMenuItem trips a Material
+    // assertion. Fall back to null until the backing list arrives — the field
+    // resets to the real value on the next build.
+    final parentOptions =
+        types.where((t) => t.slug != widget.existing?.slug).toList();
+    final selectedParent =
+        parentOptions.any((t) => t.slug == _parentSlug) ? _parentSlug : null;
+    final selectedPolicy =
+        _policies.any((p) => p.id == _retentionPolicy) ? _retentionPolicy : null;
+
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
@@ -300,7 +311,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String?>(
-                    initialValue: _parentSlug,
+                    initialValue: selectedParent,
                     decoration: const InputDecoration(
                       labelText: 'Parent type',
                       border: OutlineInputBorder(),
@@ -308,8 +319,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     items: [
                       const DropdownMenuItem<String?>(
                           value: null, child: Text('— root —')),
-                      for (final t in types
-                          .where((t) => t.slug != widget.existing?.slug))
+                      for (final t in parentOptions)
                         DropdownMenuItem<String?>(
                           value: t.slug,
                           child: Text('${'    ' * t.depth}${t.name}'),
@@ -321,7 +331,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int?>(
-                    initialValue: _retentionPolicy,
+                    initialValue: selectedPolicy,
                     decoration: const InputDecoration(
                       labelText: 'Retention policy',
                       helperText:

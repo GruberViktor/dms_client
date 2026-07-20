@@ -47,6 +47,7 @@ dependencies:
   pdf: ^3.13.0
   watcher: ^1.2.1
   crypto: ^3.0.7
+  desktop_drop: ^0.7.1
 
 dev_dependencies:
   flutter_test:

@@ -21,18 +21,22 @@ import 'document_detail_screen.dart';
 class UploadScreen extends ConsumerStatefulWidget {
   final String? initialTypeSlug;
 
-  const UploadScreen({super.key, this.initialTypeSlug});
+  /// A file supplied by the caller (e.g. dropped onto the document list),
+  /// pre-selected so the user only has to fill in the metadata.
+  final PickedFile? initialFile;
+
+  const UploadScreen({super.key, this.initialTypeSlug, this.initialFile});
 
   @override
   ConsumerState<UploadScreen> createState() => _UploadScreenState();
 }
 
-class _PickedFile {
+class PickedFile {
   final String filename;
   final Uint8List? bytes;
   final String? path;
 
-  _PickedFile({required this.filename, this.bytes, this.path});
+  PickedFile({required this.filename, this.bytes, this.path});
 
   MultipartFile toMultipart() => bytes != null
       ? MultipartFile.fromBytes(bytes!, filename: filename)
@@ -46,7 +50,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final _metaCtrl = MetadataFormController();
 
   String? _typeSlug;
-  _PickedFile? _file;
+  PickedFile? _file;
   String? _documentDate;
   bool _busy = false;
   bool _titleEdited = false;
@@ -57,6 +61,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   void initState() {
     super.initState();
     _typeSlug = widget.initialTypeSlug;
+    _file = widget.initialFile;
+    if (_file != null && _titleCtrl.text.isEmpty) {
+      _titleCtrl.text = _stripExtension(_file!.filename);
+    }
   }
 
   @override
@@ -71,7 +79,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final f = result?.files.firstOrNull;
     if (f == null) return;
     setState(() {
-      _file = _PickedFile(filename: f.name, bytes: f.bytes, path: f.path);
+      _file = PickedFile(filename: f.name, bytes: f.bytes, path: f.path);
       if (!_titleEdited && _titleCtrl.text.isEmpty) {
         _titleCtrl.text = _stripExtension(f.name);
       }
@@ -122,7 +130,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final bytes = Uint8List.fromList(await doc.save());
     final stamp = DateTime.now().toIso8601String().substring(0, 10);
     setState(() {
-      _file = _PickedFile(filename: 'scan-$stamp.pdf', bytes: bytes);
+      _file = PickedFile(filename: 'scan-$stamp.pdf', bytes: bytes);
       if (!_titleEdited && _titleCtrl.text.isEmpty) {
         _titleCtrl.text = 'Scan $stamp';
       }

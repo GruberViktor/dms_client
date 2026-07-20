@@ -118,6 +118,13 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
   @override
   Widget build(BuildContext context) {
     final types = ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
+    // Merged (ancestor-inherited) metadata fields of the restricted type, so
+    // levels can suggest keys that actually exist on those documents (e.g.
+    // "partner" on an invoice). Empty when indexing all documents.
+    final bySlug = {for (final t in types) t.slug: t};
+    final rootFields = _rootType != null
+        ? mergedMetadataFields(bySlug, _rootType!)
+        : const <MetadataFieldDef>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -223,7 +230,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                   ],
                 ),
                 for (var i = 0; i < _levels.length; i++)
-                  _buildLevelCard(context, i),
+                  _buildLevelCard(context, i, rootFields),
                 const SizedBox(height: 24),
               ],
             ),
@@ -233,7 +240,76 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
     );
   }
 
-  Widget _buildLevelCard(BuildContext context, int i) {
+  /// The "Metadata key" input for a level. When the index is restricted to a
+  /// type, the type's (inherited) metadata fields are offered as suggestions
+  /// while still allowing a free-typed key.
+  Widget _buildMetadataKeyField(
+      _LevelDraft level, List<MetadataFieldDef> rootFields) {
+    const decoration = InputDecoration(
+      labelText: 'Metadata key *',
+      border: OutlineInputBorder(),
+      isDense: true,
+    );
+    String? validate(String? v) =>
+        (v == null || v.trim().isEmpty) ? 'Required' : null;
+
+    if (rootFields.isEmpty) {
+      return TextFormField(
+        initialValue: level.sourceKey,
+        decoration: decoration,
+        validator: validate,
+        onChanged: (v) => level.sourceKey = v,
+        enabled: !_busy,
+      );
+    }
+
+    return Autocomplete<MetadataFieldDef>(
+      initialValue: TextEditingValue(text: level.sourceKey),
+      displayStringForOption: (f) => f.key,
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return rootFields;
+        return rootFields.where((f) =>
+            f.key.toLowerCase().contains(q) ||
+            f.label.toLowerCase().contains(q));
+      },
+      onSelected: (f) => level.sourceKey = f.key,
+      optionsViewBuilder: (context, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          elevation: 4,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240, maxWidth: 320),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              children: [
+                for (final f in options)
+                  ListTile(
+                    dense: true,
+                    title: Text(f.label),
+                    subtitle: f.label == f.key ? null : Text(f.key),
+                    onTap: () => onSelected(f),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      fieldViewBuilder:
+          (context, controller, focusNode, onFieldSubmitted) => TextFormField(
+        controller: controller,
+        focusNode: focusNode,
+        decoration: decoration,
+        validator: validate,
+        onChanged: (v) => level.sourceKey = v,
+        enabled: !_busy,
+      ),
+    );
+  }
+
+  Widget _buildLevelCard(
+      BuildContext context, int i, List<MetadataFieldDef> rootFields) {
     final level = _levels[i];
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -284,20 +360,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
               children: [
                 if (level.source == 'metadata') ...[
                   Expanded(
-                    child: TextFormField(
-                      initialValue: level.sourceKey,
-                      decoration: const InputDecoration(
-                        labelText: 'Metadata key *',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      validator: (v) => level.source == 'metadata' &&
-                              (v == null || v.trim().isEmpty)
-                          ? 'Required'
-                          : null,
-                      onChanged: (v) => level.sourceKey = v,
-                      enabled: !_busy,
-                    ),
+                    child: _buildMetadataKeyField(level, rootFields),
                   ),
                   const SizedBox(width: 8),
                 ],

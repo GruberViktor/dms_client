@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -61,6 +64,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   bool _initialLoaded = false;
   Object? _error;
   int _requestGen = 0;
+  bool _dragging = false;
 
   @override
   void initState() {
@@ -155,6 +159,36 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     }
   }
 
+  Future<void> _onDrop(DropDoneDetails details) async {
+    setState(() => _dragging = false);
+    final items = details.files;
+    if (items.isEmpty) return;
+    if (items.length > 1) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text('Drop one file at a time to upload.'),
+        ));
+      return;
+    }
+    final x = items.first;
+    // On desktop the dropped file has a real path; read bytes as a fallback
+    // for platforms where it does not (e.g. web).
+    final Uint8List? bytes = x.path.isEmpty ? await x.readAsBytes() : null;
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => UploadScreen(
+        initialTypeSlug: _filters.typeSlug,
+        initialFile: PickedFile(
+          filename: x.name,
+          path: x.path.isEmpty ? null : x.path,
+          bytes: bytes,
+        ),
+      ),
+    ));
+    _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     final typesAsync = ref.watch(documentTypesProvider);
@@ -204,12 +238,22 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          _buildFilterBar(context),
-          const Divider(height: 1),
-          Expanded(child: _buildList(context)),
-        ],
+      body: DropTarget(
+        onDragEntered: (_) => setState(() => _dragging = true),
+        onDragExited: (_) => setState(() => _dragging = false),
+        onDragDone: _onDrop,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                _buildFilterBar(context),
+                const Divider(height: 1),
+                Expanded(child: _buildList(context)),
+              ],
+            ),
+            if (_dragging) _buildDropOverlay(context),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.upload_file),
@@ -220,6 +264,38 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           ));
           _reload();
         },
+      ),
+    );
+  }
+
+  Widget _buildDropOverlay(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.primary, width: 2),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.file_download_outlined,
+                    size: 48, color: scheme.onPrimaryContainer),
+                const SizedBox(height: 12),
+                Text(
+                  'Drop file to upload',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: scheme.onPrimaryContainer,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
