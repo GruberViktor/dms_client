@@ -53,49 +53,51 @@ class DocumentThumbnail extends StatelessWidget {
   }
 }
 
-/// Renders a search headline: keeps <b>…</b> as bold, strips other tags.
-class HeadlineText extends StatelessWidget {
-  final String headline;
-  final int maxLines;
+/// Large preview for card headers: first page at `preview` size, cropped to
+/// the top edge so the document reads like a sheet of paper. Falls back to a
+/// mime icon for formats without previews (404).
+class DocumentPreviewImage extends StatelessWidget {
+  final ApiClient api;
+  final String uuid;
+  final String? mime;
 
-  const HeadlineText(this.headline, {super.key, this.maxLines = 2});
+  const DocumentPreviewImage({
+    super.key,
+    required this.api,
+    required this.uuid,
+    required this.mime,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final base = Theme.of(context).textTheme.bodyMedium!;
-    final bold = base.copyWith(
-      fontWeight: FontWeight.w700,
-      backgroundColor:
-          Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .5),
-    );
-    final spans = <TextSpan>[];
-    final re = RegExp(r'<b>(.*?)</b>', dotAll: true);
-    var pos = 0;
-    for (final m in re.allMatches(headline)) {
-      if (m.start > pos) {
-        spans.add(TextSpan(text: _strip(headline.substring(pos, m.start))));
-      }
-      spans.add(TextSpan(text: _strip(m.group(1)!), style: bold));
-      pos = m.end;
-    }
-    if (pos < headline.length) {
-      spans.add(TextSpan(text: _strip(headline.substring(pos))));
-    }
-    return Text.rich(
-      TextSpan(style: base, children: spans),
-      maxLines: maxLines,
-      overflow: TextOverflow.ellipsis,
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      color: scheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: Image.network(
+        api.documentPreviewUrl(uuid, size: 'preview'),
+        headers: api.authHeaders,
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        width: double.infinity,
+        height: double.infinity,
+        frameBuilder: (context, child, frame, wasSync) => wasSync || frame != null
+            ? child
+            : const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+        errorBuilder: (context, e, st) => Icon(
+          mimeIcon(mime),
+          size: 40,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
-
-  static String _strip(String s) => s
-      .replaceAll(RegExp(r'<[^>]*>'), '')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"')
-      .replaceAll('&#x27;', "'")
-      .replaceAll('&#39;', "'");
 }
 
 /// Standard error box with retry.

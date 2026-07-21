@@ -27,11 +27,13 @@ token) in flutter_secure_storage.
 - `lib/src/state/session.dart` — Riverpod session (login/restore/logout),
   `documentTypesProvider` (fetched once per session).
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
-  document list (type-tree drawer, Active/All/Archived, date range, metadata
-  filters, infinite scroll), document detail (preview pager, metadata card,
-  versions, timeline, download & open, archive, extraction polling), search
-  (debounced, headline `<b>` rendering), index browser (drill nodes → leaf
-  document list).
+  document list (compact search field + type dropdown, type-tree drawer,
+  Active/All/Archived, date range, metadata filters, infinite scroll —
+  a non-empty query feeds the same card grid from `/search/` instead, and
+  hides the date/metadata chips that endpoint cannot apply; headlines are
+  discarded), document detail (preview pager, metadata card, versions, timeline,
+  download & open, archive, extraction polling), index browser (drill nodes →
+  leaf document list).
 - `lib/src/widgets/timeline.dart` — the §6 vertical timeline: version anchor
   cards, grouped view/download events, collapsed ±N diff chips, hidden
   versions struck through.

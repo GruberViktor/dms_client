@@ -48,6 +48,7 @@ dependencies:
   watcher: ^1.2.1
   crypto: ^3.0.7
   desktop_drop: ^0.7.1
+  calendar_date_picker2: ^3.0.0
 
 dev_dependencies:
   flutter_test:

@@ -5,7 +5,6 @@ import '../state/session.dart';
 import 'admin/admin_screen.dart';
 import 'document_list_screen.dart';
 import 'index_browser_screen.dart';
-import 'search_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -27,8 +26,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _rootFor(int tab) => switch (tab) {
         0 => const DocumentListScreen(),
-        1 => const SearchScreen(),
-        2 => const IndexListScreen(),
+        1 => const IndexListScreen(),
         _ => const AdminScreen(),
       };
 
@@ -54,8 +52,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final isAdmin = session?.user.isSuperuser ?? false;
     final destinations = [
+      // Search lives in the document list itself.
       (icon: Icons.description_outlined, label: 'Documents'),
-      (icon: Icons.search, label: 'Search'),
       (icon: Icons.account_tree_outlined, label: 'Indexes'),
       // Admin area is gated on is_superuser (spec §7 M4).
       if (isAdmin)
