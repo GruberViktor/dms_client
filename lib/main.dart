@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'src/screens/home_screen.dart';
 import 'src/screens/login_screen.dart';
 import 'src/state/session.dart';
+import 'src/theme/adwaita_theme.dart';
 
 void main() {
   runApp(const ProviderScope(child: DmsApp()));
@@ -37,15 +38,9 @@ class DmsApp extends ConsumerWidget {
         },
         child: child,
       ),
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E5E4E)),
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2E5E4E),
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: adwaitaDarkTheme(),
+      darkTheme: adwaitaDarkTheme(),
+      themeMode: ThemeMode.dark,
       home: session.restoring
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : session.loggedIn
