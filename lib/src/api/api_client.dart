@@ -291,6 +291,16 @@ class ApiClient {
     return Uint8List.fromList(res.data!);
   }
 
+  /// Server-side conversion to PDF — only for odt/docx versions.
+  Future<Uint8List> downloadVersionPdf(String uuid, int number) async {
+    final res = await _request<List<int>>(
+      'GET',
+      '/documents/$uuid/versions/$number/download/pdf',
+      responseType: ResponseType.bytes,
+    );
+    return Uint8List.fromList(res.data!);
+  }
+
   Future<DocumentVersion> hideVersion(String uuid, int number,
       {String? reason}) async {
     final res = await _request(

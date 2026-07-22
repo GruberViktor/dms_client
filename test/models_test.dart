@@ -185,6 +185,21 @@ void main() {
     expect((a as AuditEvent).actor, isNull);
   });
 
+  test('SearchHit parses mime_type (null when all versions hidden)', () {
+    final hit = SearchHit.fromJson({
+      'uuid': 'u1',
+      'title': 'Report',
+      'document_type': 'scratch',
+      'mime_type': 'application/vnd.oasis.opendocument.text',
+      'headline': 'x',
+    });
+    expect(hit.mimeType, 'application/vnd.oasis.opendocument.text');
+    expect(
+      SearchHit.fromJson({'uuid': 'u2', 'mime_type': null}).mimeType,
+      isNull,
+    );
+  });
+
   test('NotificationItem parses payload and tolerates sparse rows', () {
     final n = NotificationItem.fromJson({
       'id': 17,

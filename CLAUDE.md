@@ -26,6 +26,9 @@ token) in flutter_secure_storage.
   `parent_slug` to build the inherited metadata field set per type.
 - `lib/src/state/session.dart` — Riverpod session (login/restore/logout),
   `documentTypesProvider` (fetched once per session).
+- `lib/src/state/notifications.dart` + `state/watches.dart` — unread inbox
+  count polled every 45 s (no push channel exists) and the session-cached
+  watch set with optimistic document/type toggles.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
   document list (compact search field + type dropdown, type-tree drawer,
   Active/All/Archived, date range, metadata filters, infinite scroll —
@@ -34,7 +37,10 @@ token) in flutter_secure_storage.
   discarded), document detail (preview pager, metadata card, versions, comments
   card — affordances driven by server-resolved `can_edit`/`can_delete`, composer
   shown optimistically and dropped per type on 403 — timeline, download & open,
-  archive, extraction polling), index browser (drill nodes → leaf document list).
+  archive, extraction polling), index browser (drill nodes → leaf document
+  list), notification inbox (unread filter, mark read / read-all,
+  email-preference dialog; rows render from `payload`, tap deep-links to the
+  document unless it was deleted).
 - `lib/src/widgets/timeline.dart` — the §6 vertical timeline: version anchor
   cards, grouped view/download events, collapsed ±N diff chips, hidden
   versions struck through, comment nodes (soft-deleted ones stay, struck
@@ -65,6 +71,15 @@ change-type, index management UI, admin area under `screens/admin/` gated on
 is_superuser: types + metadata fields + ACL editor, retention policies,
 storages) implemented. Still open from M4: mobile share-sheet intake,
 optional offline upload queue, global audit browser.
+
+Notifications & watches hand-off implemented: Inbox tab with polled unread
+badge, watch bells on document detail + type-tree nodes (a type watch covers
+the subtree), @-mention autocomplete in the comment composer (`can_view:
+false` users struck through), mention tokens styled in comment bodies.
+odt/docx versions can be fetched as PDF (`…/versions/{n}/download/pdf`) via
+the pdf icon on list cards, the detail top bar, and version rows. Note the
+spec prose calling `mime_type` detail-only is outdated: the server now sends
+it on document list and search rows too (null when all versions are hidden).
 
 ACL editor caveat: PUT acls body is `[{"group": <pk>, "permissions": [...]}]`
 and there is no group listing API (spec §10) — groups are entered as raw ids.

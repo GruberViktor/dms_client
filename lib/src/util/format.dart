@@ -24,6 +24,21 @@ String formatBytes(int bytes) {
   return '${v.toStringAsFixed(v >= 10 ? 0 : 1)} ${units[i]}';
 }
 
+/// Formats the server can convert on the fly via
+/// GET /documents/{uuid}/versions/{n}/download/pdf (odt and docx).
+/// Substring match: servers may append parameters (e.g. `; charset=binary`).
+bool canDownloadAsPdf(String? mime) {
+  final m = mime ?? '';
+  return m.contains('officedocument.wordprocessingml.document') ||
+      m.contains('opendocument.text');
+}
+
+/// "report.docx" → "report.pdf" (extension swapped, not appended).
+String pdfFilename(String name) {
+  final dot = name.lastIndexOf('.');
+  return '${dot > 0 ? name.substring(0, dot) : name}.pdf';
+}
+
 /// Icon-name category for a mime type (used when no preview exists).
 String mimeCategory(String? mime) {
   final m = mime ?? '';

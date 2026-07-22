@@ -13,8 +13,7 @@ import 'common.dart';
 /// open/download actions.
 ///
 /// Built from a list [Document] or from a [SearchHit] — the search payload
-/// carries no mime type or compliance flag, so those degrade to the generic
-/// icon fallback and a missing lock badge.
+/// carries no compliance flag, so hits never show the lock badge.
 class DocumentCard extends StatefulWidget {
   final ApiClient api;
   final String uuid;
@@ -71,7 +70,7 @@ class DocumentCard extends StatefulWidget {
           title: hit.title,
           typeName: typeName,
           dateLabel: _dateLabel(hit.documentDate, hit.dateAdded),
-          mimeType: null,
+          mimeType: hit.mimeType,
           archived: hit.archived,
           inComplianceMode: false,
           onOpen: onOpen,
@@ -92,12 +91,14 @@ class DocumentCard extends StatefulWidget {
 }
 
 class _DocumentCardState extends State<DocumentCard> {
-  bool _busy = false;
+  String? _busyAction; // 'file' | 'pdf'
+
+  bool get _busy => _busyAction != null;
 
   /// The list payload carries no versions, so resolve the current one first.
-  Future<void> _download() async {
+  Future<void> _download({bool asPdf = false}) async {
     final uuid = widget.uuid;
-    setState(() => _busy = true);
+    setState(() => _busyAction = asPdf ? 'pdf' : 'file');
     try {
       final full = await widget.api.document(uuid);
       final v = full.currentVersion;
@@ -105,11 +106,14 @@ class _DocumentCardState extends State<DocumentCard> {
         if (mounted) showSnack(context, 'No downloadable version.');
         return;
       }
-      final bytes = await widget.api.downloadVersion(uuid, v.number);
+      final bytes = asPdf
+          ? await widget.api.downloadVersionPdf(uuid, v.number)
+          : await widget.api.downloadVersion(uuid, v.number);
       final dir = await getTemporaryDirectory();
-      final safeName = v.originalFilename.isNotEmpty
+      var safeName = v.originalFilename.isNotEmpty
           ? v.originalFilename.replaceAll(RegExp(r'[/\\]'), '_')
           : 'document';
+      if (asPdf) safeName = pdfFilename(safeName);
       final file = File('${dir.path}/dms/$uuid/v${v.number}/$safeName');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
@@ -122,7 +126,7 @@ class _DocumentCardState extends State<DocumentCard> {
     } catch (e) {
       if (mounted) showSnack(context, 'Download failed: $e');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busyAction = null);
     }
   }
 
@@ -213,7 +217,7 @@ class _DocumentCardState extends State<DocumentCard> {
                   Expanded(
                     child: IconButton(
                       tooltip: 'Download & open',
-                      icon: _busy
+                      icon: _busyAction == 'file'
                           ? const SizedBox(
                               width: 18,
                               height: 18,
@@ -223,6 +227,24 @@ class _DocumentCardState extends State<DocumentCard> {
                       onPressed: _busy ? null : _download,
                     ),
                   ),
+                  // Only convertible formats (odt/docx); mime_type is null
+                  // when all versions are hidden.
+                  if (canDownloadAsPdf(d.mimeType))
+                    Expanded(
+                      child: IconButton(
+                        tooltip: 'Download as PDF',
+                        icon: _busyAction == 'pdf'
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.picture_as_pdf_outlined),
+                        onPressed:
+                            _busy ? null : () => _download(asPdf: true),
+                      ),
+                    ),
                 ],
               ),
             ),

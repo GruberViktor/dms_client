@@ -188,16 +188,19 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     );
   }
 
-  Future<void> _downloadAndOpen(DocumentVersion v) async {
+  Future<void> _downloadAndOpen(DocumentVersion v, {bool asPdf = false}) async {
     final doc = _doc!;
     setState(() => _busy = true);
     try {
       final api = ref.read(apiProvider);
-      final bytes = await api.downloadVersion(doc.uuid, v.number);
+      final bytes = asPdf
+          ? await api.downloadVersionPdf(doc.uuid, v.number)
+          : await api.downloadVersion(doc.uuid, v.number);
       final dir = await getTemporaryDirectory();
-      final safeName = v.originalFilename.isNotEmpty
+      var safeName = v.originalFilename.isNotEmpty
           ? v.originalFilename.replaceAll(RegExp(r'[/\\]'), '_')
           : 'document';
+      if (asPdf) safeName = pdfFilename(safeName);
       final file = File('${dir.path}/dms/${doc.uuid}/v${v.number}/$safeName');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
@@ -707,6 +710,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         _VersionsCard(
           doc: doc,
           onDownload: _busy ? null : _downloadAndOpen,
+          onDownloadPdf:
+              _busy ? null : (v) => _downloadAndOpen(v, asPdf: true),
           onOpenEdit: (_busy || !_isDesktop) ? null : _openAndEdit,
           onUploadVersion: (_busy || !canUpload)
               ? null
@@ -796,6 +801,13 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               tooltip: 'Download & open',
               icon: const Icon(Icons.open_in_new),
               onPressed: _busy ? null : () => _downloadAndOpen(current),
+            ),
+          if (current != null && canDownloadAsPdf(current.mimeType))
+            IconButton(
+              tooltip: 'Download as PDF',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed:
+                  _busy ? null : () => _downloadAndOpen(current, asPdf: true),
             ),
           IconButton(
             tooltip: doc.archived ? 'Unarchive' : 'Archive',
@@ -1503,6 +1515,7 @@ class _EditSessionBanner extends StatelessWidget {
 class _VersionsCard extends StatelessWidget {
   final Document doc;
   final void Function(DocumentVersion)? onDownload;
+  final void Function(DocumentVersion)? onDownloadPdf;
   final void Function(DocumentVersion)? onOpenEdit;
   final VoidCallback? onUploadVersion;
   final void Function(DocumentVersion)? onReplaceFile;
@@ -1513,6 +1526,7 @@ class _VersionsCard extends StatelessWidget {
   const _VersionsCard({
     required this.doc,
     required this.onDownload,
+    required this.onDownloadPdf,
     required this.onOpenEdit,
     required this.onUploadVersion,
     required this.onReplaceFile,
@@ -1602,6 +1616,14 @@ class _VersionsCard extends StatelessWidget {
                             ? () => onDownload!(v)
                             : null,
                       ),
+                      if (canDownloadAsPdf(v.mimeType))
+                        IconButton(
+                          tooltip: 'Download as PDF',
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          onPressed: onDownloadPdf != null
+                              ? () => onDownloadPdf!(v)
+                              : null,
+                        ),
                     ],
                     if ((v.consoleUrl != null && v.consoleUrl!.isNotEmpty) ||
                         (v.isHidden

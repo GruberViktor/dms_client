@@ -228,8 +228,9 @@ class Document {
   final bool inComplianceMode;
   // Detail-only:
   final String? content;
-  final String? mimeType;
   final List<DocumentVersion> versions;
+  // Also present on list/search rows; null when all versions are hidden.
+  final String? mimeType;
 
   Document({
     required this.uuid,
@@ -476,6 +477,7 @@ class SearchHit {
   final String? documentDate;
   final DateTime? dateAdded;
   final bool archived;
+  final String? mimeType; // null when all versions are hidden
   final double? rank;
   final String headline; // contains <b>..</b> around matches
 
@@ -486,6 +488,7 @@ class SearchHit {
     required this.documentDate,
     required this.dateAdded,
     required this.archived,
+    required this.mimeType,
     required this.rank,
     required this.headline,
   });
@@ -499,6 +502,7 @@ class SearchHit {
             ? DateTime.tryParse(json['date_added'] as String)
             : null,
         archived: _asBool(json['archived']),
+        mimeType: json['mime_type'] as String?,
         rank: (json['rank'] as num?)?.toDouble(),
         headline: (json['headline'] as String?) ?? '',
       );
