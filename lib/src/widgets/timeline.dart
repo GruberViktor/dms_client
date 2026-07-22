@@ -20,8 +20,12 @@ class DocumentTimeline extends StatelessWidget {
         child: Text('No events.'),
       );
     }
+    // comment_* audit rows duplicate what the comment node already shows —
+    // add/edit via the node itself, delete via its struck-through state.
+    final visible = events.where((e) =>
+        e is! AuditEvent || !e.action.startsWith('comment_'));
     // Newest first.
-    final sorted = [...events]
+    final sorted = [...visible]
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final entries = _groupViewDownload(sorted);
     return Column(
@@ -75,7 +79,8 @@ class _TimelineRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final e = entry.event;
     final isVersion = e is VersionEvent;
-    final markerSize = isVersion ? 18.0 : 10.0;
+    final isComment = e is CommentEvent;
+    final markerSize = isVersion ? 18.0 : (isComment ? 14.0 : 10.0);
 
     return IntrinsicHeight(
       child: Row(
@@ -93,7 +98,11 @@ class _TimelineRow extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: isVersion
                         ? (e.isHidden ? scheme.outlineVariant : scheme.primary)
-                        : scheme.outline,
+                        : isComment
+                            ? (e.isDeleted
+                                ? scheme.outlineVariant
+                                : scheme.tertiary)
+                            : scheme.outline,
                     border: isVersion
                         ? Border.all(color: scheme.primaryContainer, width: 3)
                         : null,
@@ -111,7 +120,10 @@ class _TimelineRow extends StatelessWidget {
               padding: EdgeInsets.only(bottom: isLast ? 4 : 16),
               child: isVersion
                   ? _VersionCard(event: e)
-                  : _AuditLine(event: e as AuditEvent, repeat: entry.repeat),
+                  : isComment
+                      ? _CommentBubble(event: e)
+                      : _AuditLine(
+                          event: e as AuditEvent, repeat: entry.repeat),
             ),
           ),
         ],
@@ -247,6 +259,88 @@ class _ChangesTable extends StatelessWidget {
     if (v == null) return '—';
     if (v is String && v.isEmpty) return '—';
     return '$v';
+  }
+}
+
+/// A comment node: user speech, styled apart from version anchors.
+/// The body is untrusted plain text — rendered verbatim, newlines kept.
+/// Soft-deleted comments stay visible, struck through like hidden versions.
+class _CommentBubble extends StatelessWidget {
+  final CommentEvent event;
+
+  const _CommentBubble({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final deleted = event.isDeleted;
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: deleted
+            ? scheme.surfaceContainerLow
+            : scheme.tertiaryContainer.withValues(alpha: .35),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.chat_bubble_outline,
+                  size: 14,
+                  color: deleted ? scheme.outline : scheme.tertiary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: event.author,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const TextSpan(text: ' commented'),
+                    if (event.editedAt != null)
+                      TextSpan(
+                        text: event.editedBy != null &&
+                                event.editedBy != event.author
+                            ? ' · edited by ${event.editedBy}'
+                            : ' · edited',
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                      ),
+                  ]),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: deleted ? scheme.onSurfaceVariant : null,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            event.body,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              decoration: deleted ? TextDecoration.lineThrough : null,
+              color: deleted ? scheme.onSurfaceVariant : null,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(formatDateTime(event.timestamp), style: muted),
+          if (deleted)
+            Text(
+              'Removed'
+              '${event.deletedBy != null ? ' by ${event.deletedBy}' : ''}'
+              '${event.deletedAt != null ? ' · ${formatDateTime(event.deletedAt!)}' : ''}',
+              style: muted?.copyWith(fontStyle: FontStyle.italic),
+            ),
+        ],
+      ),
+    );
   }
 }
 

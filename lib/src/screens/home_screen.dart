@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../state/notifications.dart';
 import '../state/session.dart';
 import 'admin/admin_screen.dart';
 import 'document_list_screen.dart';
 import 'index_browser_screen.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -27,6 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _rootFor(int tab) => switch (tab) {
         0 => const DocumentListScreen(),
         1 => const IndexListScreen(),
+        2 => const NotificationsScreen(),
         _ => const AdminScreen(),
       };
 
@@ -51,13 +54,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final session = ref.watch(sessionProvider).session;
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final isAdmin = session?.user.isSuperuser ?? false;
+    // No push channel exists — the badge count is polled (~45 s) while
+    // logged in (notifications hand-off §1).
+    final unread = ref.watch(unreadNotificationsProvider);
+    final inboxIcon = Badge.count(
+      count: unread,
+      isLabelVisible: unread > 0,
+      child: const Icon(Icons.notifications_outlined),
+    );
     final destinations = [
       // Search lives in the document list itself.
-      (icon: Icons.description_outlined, label: 'Documents'),
-      (icon: Icons.account_tree_outlined, label: 'Indexes'),
+      (icon: const Icon(Icons.description_outlined), label: 'Documents'),
+      (icon: const Icon(Icons.account_tree_outlined), label: 'Indexes'),
+      (icon: inboxIcon, label: 'Inbox'),
       // Admin area is gated on is_superuser (spec §7 M4).
       if (isAdmin)
-        (icon: Icons.admin_panel_settings_outlined, label: 'Admin'),
+        (icon: const Icon(Icons.admin_panel_settings_outlined), label: 'Admin'),
     ];
     if (_tab >= destinations.length) _tab = 0;
 
@@ -106,7 +118,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               destinations: [
                 for (final d in destinations)
                   NavigationRailDestination(
-                    icon: Icon(d.icon),
+                    icon: d.icon,
                     label: Text(d.label),
                   ),
               ],
@@ -125,7 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onDestinationSelected: _onDestinationSelected,
         destinations: [
           for (final d in destinations)
-            NavigationDestination(icon: Icon(d.icon), label: d.label),
+            NavigationDestination(icon: d.icon, label: d.label),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
@@ -14,6 +15,7 @@ import '../models/models.dart';
 import '../state/edit_sessions.dart';
 import '../state/permissions.dart';
 import '../state/session.dart';
+import '../state/watches.dart';
 import '../util/format.dart';
 import '../widgets/common.dart';
 import '../widgets/timeline.dart';
@@ -32,6 +34,7 @@ class DocumentDetailScreen extends ConsumerStatefulWidget {
 class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   Document? _doc;
   List<TimelineEvent>? _events;
+  List<DocumentComment>? _comments;
   Object? _error;
   Timer? _pollTimer;
   bool _busy = false;
@@ -59,10 +62,17 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       } on ApiException {
         events = null; // timeline may be forbidden; the rest still works
       }
+      List<DocumentComment>? comments;
+      try {
+        comments = await api.comments(widget.uuid);
+      } on ApiException {
+        comments = null;
+      }
       if (!mounted) return;
       setState(() {
         _doc = doc;
         _events = events;
+        _comments = comments;
       });
       _schedulePollIfExtracting();
     } catch (e) {
@@ -202,6 +212,25 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       if (mounted) showSnack(context, 'Download failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Watch = notified on any mutation (notifications hand-off §2); the
+  /// toggle is optimistic, the notifier reverts on failure.
+  Future<void> _toggleWatch() async {
+    try {
+      final on =
+          await ref.read(watchesProvider.notifier).toggleDocument(_doc!.uuid);
+      if (mounted) {
+        showSnack(
+          context,
+          on
+              ? 'Watching — you will be notified about changes.'
+              : 'No longer watching this document.',
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) showSnack(context, e.detail);
     }
   }
 
@@ -385,6 +414,89 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     }
   }
 
+  /// Comments changed → the timeline changed too; refresh it quietly.
+  Future<void> _refreshEvents() async {
+    try {
+      final events = await ref.read(apiProvider).timeline(widget.uuid);
+      if (mounted) setState(() => _events = events);
+    } on ApiException {
+      // keep the current timeline
+    }
+  }
+
+  Future<bool> _postComment(String body) async {
+    try {
+      final c = await ref.read(apiProvider).postComment(_doc!.uuid, body);
+      if (!mounted) return true;
+      setState(() => _comments = [...?_comments, c]);
+      _refreshEvents();
+      return true;
+    } on ApiException catch (e) {
+      // §5 graceful degradation: a 403 disables composing for this type.
+      if (e.isForbidden) _recordDenied('comment');
+      if (mounted) showSnack(context, e.detail);
+      return false;
+    }
+  }
+
+  Future<bool> _editComment(DocumentComment c, String body) async {
+    try {
+      final updated =
+          await ref.read(apiProvider).patchComment(_doc!.uuid, c.id, body);
+      if (!mounted) return true;
+      setState(() => _comments = [
+            for (final x in _comments ?? const <DocumentComment>[])
+              x.id == c.id ? updated : x,
+          ]);
+      _refreshEvents();
+      return true;
+    } on ApiException catch (e) {
+      if (mounted) showSnack(context, e.detail);
+      return false;
+    }
+  }
+
+  /// Soft delete server-side, but irreversible from the client (no undelete).
+  Future<void> _deleteComment(DocumentComment c) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete comment?'),
+        content: const Text(
+          'The comment disappears for everyone. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(apiProvider).deleteComment(_doc!.uuid, c.id);
+    } on ApiException catch (e) {
+      // 404 = already gone (deleted elsewhere) — dropping the row is right
+      // either way.
+      if (e.statusCode != 404) {
+        if (mounted) showSnack(context, e.detail);
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _comments =
+        [...?_comments]..removeWhere((x) => x.id == c.id));
+    _refreshEvents();
+  }
+
   /// Change the document type (409s in compliance mode; not offered there).
   Future<void> _changeType() async {
     final doc = _doc!;
@@ -566,9 +678,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final bySlug = ref.watch(documentTypesBySlugProvider);
     final typeName = bySlug[doc.documentType]?.name ?? doc.documentType;
     final wide = MediaQuery.sizeOf(context).width >= 900;
+    ref.watch(deniedActionsProvider); // rebuild when an action gets denied
     final denied = ref.watch(deniedActionsProvider.notifier);
     final canEdit = !denied.isDenied(doc.documentType, 'edit_metadata');
     final canUpload = !denied.isDenied(doc.documentType, 'upload_version');
+    // No "may I comment?" flag exists — show the composer optimistically and
+    // drop it for this type after a 403 (hand-off §5).
+    final canComment = !denied.isDenied(doc.documentType, 'comment');
+    final watching = ref.watch(watchesProvider).documents.contains(doc.uuid);
     final editSession = ref.watch(editSessionsProvider)[doc.uuid];
 
     final infoColumn = Column(
@@ -601,6 +718,18 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           onHide: (_busy || !canUpload) ? null : _hideVersion,
           onUnhide: (_busy || !canUpload) ? null : _unhideVersion,
           onReExtract: (_busy || !canUpload) ? null : _reExtract,
+        ),
+        const SizedBox(height: 12),
+        _CommentsCard(
+          comments: _comments,
+          canCompose: canComment,
+          onPost: _postComment,
+          onEdit: _editComment,
+          onDelete: _deleteComment,
+          // §3: pass the document so can_view reflects *this* document.
+          queryMentions: (q) => ref
+              .read(apiProvider)
+              .userSuggestions(search: q, documentUuid: doc.uuid, limit: 8),
         ),
         const SizedBox(height: 12),
         Card(
@@ -647,6 +776,15 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: watching ? 'Stop watching' : 'Watch for changes',
+            icon: Icon(
+              watching
+                  ? Icons.notifications_active
+                  : Icons.notifications_none_outlined,
+            ),
+            onPressed: _toggleWatch,
+          ),
           if (canEdit)
             IconButton(
               tooltip: 'Edit metadata',
@@ -846,6 +984,416 @@ class _MetadataCard extends StatelessWidget {
       default:
         return '$value';
     }
+  }
+}
+
+/// Flat plain-text comments (comments hand-off §5). Edit/delete affordances
+/// are driven purely by the server-resolved can_edit/can_delete flags.
+class _CommentsCard extends StatefulWidget {
+  final List<DocumentComment>? comments; // null = could not be loaded
+  final bool canCompose;
+  final Future<bool> Function(String body) onPost;
+  final Future<bool> Function(DocumentComment comment, String body) onEdit;
+  final Future<void> Function(DocumentComment comment) onDelete;
+  final Future<List<UserSuggestion>> Function(String query) queryMentions;
+
+  const _CommentsCard({
+    required this.comments,
+    required this.canCompose,
+    required this.onPost,
+    required this.onEdit,
+    required this.onDelete,
+    required this.queryMentions,
+  });
+
+  @override
+  State<_CommentsCard> createState() => _CommentsCardState();
+}
+
+class _CommentsCardState extends State<_CommentsCard> {
+  final _composerCtrl = TextEditingController();
+  final _editCtrl = TextEditingController();
+  int? _editingId;
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _composerCtrl.dispose();
+    _editCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final body = _composerCtrl.text.trim();
+    if (body.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    final ok = await widget.onPost(body);
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      if (ok) _composerCtrl.clear();
+    });
+  }
+
+  Future<void> _saveEdit(DocumentComment c) async {
+    final body = _editCtrl.text.trim();
+    if (body.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    final ok = await widget.onEdit(c, body);
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      if (ok) _editingId = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final comments = widget.comments;
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              comments == null || comments.isEmpty
+                  ? 'Comments'
+                  : 'Comments (${comments.length})',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            if (comments == null)
+              Text('Comments not available.', style: muted)
+            else if (comments.isEmpty)
+              Text('No comments yet.', style: muted)
+            else
+              // Server order: oldest first, new ones append at the bottom.
+              for (final c in comments)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _editingId == c.id ? _editor(c) : _tile(c),
+                ),
+            if (widget.canCompose) _composer() else ...[
+              const SizedBox(height: 4),
+              Text(
+                'You are not allowed to comment on this document type.',
+                style: muted?.copyWith(fontStyle: FontStyle.italic),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(DocumentComment c) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                    text: c.author,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  TextSpan(
+                    text: '  ${formatDateTime(c.createdAt)}',
+                    style: muted,
+                  ),
+                  if (c.isEdited)
+                    TextSpan(
+                      text: c.editedBy != null && c.editedBy != c.author
+                          ? ' · edited by ${c.editedBy}'
+                          : ' · edited',
+                      style: muted?.copyWith(fontStyle: FontStyle.italic),
+                    ),
+                ]),
+                style: theme.textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (c.canEdit)
+              IconButton(
+                tooltip: 'Edit comment',
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                visualDensity: VisualDensity.compact,
+                onPressed: _sending
+                    ? null
+                    : () => setState(() {
+                          _editingId = c.id;
+                          _editCtrl.text = c.body;
+                        }),
+              ),
+            if (c.canDelete)
+              IconButton(
+                tooltip: 'Delete comment',
+                icon: const Icon(Icons.delete_outline, size: 16),
+                visualDensity: VisualDensity.compact,
+                onPressed: _sending ? null : () => widget.onDelete(c),
+              ),
+          ],
+        ),
+        // Untrusted plain text: rendered verbatim, newlines preserved.
+        // @username tokens are only styled — the server treats them as text.
+        Text.rich(
+          _withMentionStyle(
+            c.body,
+            TextStyle(
+              color: scheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: theme.textTheme.bodyMedium,
+        ),
+      ],
+    );
+  }
+
+  Widget _editor(DocumentComment c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _MentionField(
+          controller: _editCtrl,
+          queryMentions: widget.queryMentions,
+          autofocus: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed:
+                  _sending ? null : () => setState(() => _editingId = null),
+              child: const Text('Cancel'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: _sending ? null : () => _saveEdit(c),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _composer() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: _MentionField(
+              controller: _composerCtrl,
+              queryMentions: widget.queryMentions,
+              enabled: !_sending,
+              decoration: const InputDecoration(
+                hintText: 'Add a comment…  (@ mentions someone)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filledTonal(
+            tooltip: 'Post comment',
+            icon: _sending
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send, size: 18),
+            onPressed: _sending ? null : _send,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Username-shaped tokens (notifications hand-off §3: `. @ + - _` allowed).
+final _mentionRe = RegExp(r'@[A-Za-z0-9._@+\-]+');
+
+/// Styles `@username` tokens in a comment body. Purely cosmetic — unknown
+/// names are styled too; the server resolves real mentions.
+TextSpan _withMentionStyle(String body, TextStyle mentionStyle) {
+  final children = <TextSpan>[];
+  var last = 0;
+  for (final m in _mentionRe.allMatches(body)) {
+    if (m.start > last) children.add(TextSpan(text: body.substring(last, m.start)));
+    children.add(TextSpan(text: m.group(0), style: mentionStyle));
+    last = m.end;
+  }
+  if (last < body.length) children.add(TextSpan(text: body.substring(last)));
+  return TextSpan(children: children);
+}
+
+/// Comment input with an @-mention picker (notifications hand-off §3):
+/// typing `@…` at the cursor queries the username autocomplete (debounced)
+/// and shows suggestions above the field. Users without `view` on the
+/// document come back `can_view: false` and are shown struck through — the
+/// mention would post as plain text and notify nobody.
+class _MentionField extends StatefulWidget {
+  final TextEditingController controller;
+  final Future<List<UserSuggestion>> Function(String query) queryMentions;
+  final InputDecoration decoration;
+  final bool enabled;
+  final bool autofocus;
+
+  const _MentionField({
+    required this.controller,
+    required this.queryMentions,
+    required this.decoration,
+    this.enabled = true,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_MentionField> createState() => _MentionFieldState();
+}
+
+class _MentionFieldState extends State<_MentionField> {
+  static final _tokenRe = RegExp(r'(?:^|\s)@([A-Za-z0-9._@+\-]*)$');
+
+  List<UserSuggestion> _suggestions = const [];
+  int _tokenStart = -1; // index of the '@' being completed
+  Timer? _debounce;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onChanged() {
+    final value = widget.controller.value;
+    final cursor = value.selection.baseOffset;
+    if (!value.selection.isCollapsed || cursor < 0) {
+      _clear();
+      return;
+    }
+    final m = _tokenRe.firstMatch(value.text.substring(0, cursor));
+    if (m == null) {
+      _clear();
+      return;
+    }
+    _tokenStart = cursor - m.group(1)!.length - 1;
+    final query = m.group(1)!;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      final gen = ++_generation;
+      try {
+        final users = await widget.queryMentions(query);
+        // Drop stale responses and responses for an abandoned token.
+        if (mounted && gen == _generation && _tokenStart >= 0) {
+          setState(() => _suggestions = users);
+        }
+      } on ApiException {
+        // Autocomplete is best-effort; typing the name still works.
+      }
+    });
+  }
+
+  void _clear() {
+    _debounce?.cancel();
+    _generation++;
+    _tokenStart = -1;
+    if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
+  }
+
+  void _insert(UserSuggestion u) {
+    final value = widget.controller.value;
+    final cursor = value.selection.baseOffset;
+    if (_tokenStart < 0 || cursor < _tokenStart) return;
+    final replaced = '@${u.username} ';
+    widget.controller.value = TextEditingValue(
+      text: value.text.replaceRange(_tokenStart, cursor, replaced),
+      selection:
+          TextSelection.collapsed(offset: _tokenStart + replaced.length),
+    );
+    _clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_suggestions.isNotEmpty)
+          Card(
+            margin: const EdgeInsets.only(bottom: 4),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final u in _suggestions)
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.alternate_email, size: 16),
+                      title: Text(
+                        u.username,
+                        style: u.canView
+                            ? null
+                            : TextStyle(
+                                decoration: TextDecoration.lineThrough,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                      ),
+                      subtitle: u.canView
+                          ? null
+                          : Text(
+                              'Cannot view this document — will not be notified',
+                              style: theme.textTheme.labelSmall,
+                            ),
+                      onTap: () => _insert(u),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        TextField(
+          controller: widget.controller,
+          enabled: widget.enabled,
+          autofocus: widget.autofocus,
+          minLines: 1,
+          maxLines: 6,
+          inputFormatters: [LengthLimitingTextInputFormatter(10000)],
+          decoration: widget.decoration,
+        ),
+      ],
+    );
   }
 }
 

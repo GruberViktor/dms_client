@@ -31,12 +31,15 @@ token) in flutter_secure_storage.
   Active/All/Archived, date range, metadata filters, infinite scroll —
   a non-empty query feeds the same card grid from `/search/` instead, and
   hides the date/metadata chips that endpoint cannot apply; headlines are
-  discarded), document detail (preview pager, metadata card, versions, timeline,
-  download & open, archive, extraction polling), index browser (drill nodes →
-  leaf document list).
+  discarded), document detail (preview pager, metadata card, versions, comments
+  card — affordances driven by server-resolved `can_edit`/`can_delete`, composer
+  shown optimistically and dropped per type on 403 — timeline, download & open,
+  archive, extraction polling), index browser (drill nodes → leaf document list).
 - `lib/src/widgets/timeline.dart` — the §6 vertical timeline: version anchor
   cards, grouped view/download events, collapsed ±N diff chips, hidden
-  versions struck through.
+  versions struck through, comment nodes (soft-deleted ones stay, struck
+  through with "removed by" hint; `comment_*` audit rows are suppressed as
+  duplicates of the nodes).
 
 ## Conventions
 

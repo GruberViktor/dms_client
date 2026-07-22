@@ -229,6 +229,33 @@ class ApiClient {
     return Document.fromJson(_asMap(res.data));
   }
 
+  // ---- Comments ----
+
+  /// Bare JSON array (no pagination envelope), oldest first.
+  Future<List<DocumentComment>> comments(String uuid) async {
+    final res = await _request('GET', '/documents/$uuid/comments/');
+    return ((res.data as List?) ?? const [])
+        .map((e) => DocumentComment.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  Future<DocumentComment> postComment(String uuid, String body) async {
+    final res = await _request('POST', '/documents/$uuid/comments/',
+        data: {'body': body});
+    return DocumentComment.fromJson(_asMap(res.data));
+  }
+
+  Future<DocumentComment> patchComment(String uuid, int id, String body) async {
+    final res = await _request('PATCH', '/documents/$uuid/comments/$id/',
+        data: {'body': body});
+    return DocumentComment.fromJson(_asMap(res.data));
+  }
+
+  /// Soft delete — a second DELETE of the same comment 404s.
+  Future<void> deleteComment(String uuid, int id) async {
+    await _request('DELETE', '/documents/$uuid/comments/$id/');
+  }
+
   // ---- Versions ----
 
   Future<DocumentVersion> uploadVersion(String uuid, MultipartFile file,
@@ -375,6 +402,86 @@ class ApiClient {
       return (nodes: nodes, documents: null);
     }
     return (nodes: null, documents: Paginated.fromJson(map, Document.fromJson));
+  }
+
+  // ---- Notifications & watches (notifications hand-off) ----
+
+  Future<Paginated<NotificationItem>> notifications({
+    bool unreadOnly = false,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _request('GET', '/notifications/', query: {
+      if (unreadOnly) 'unread': 'true',
+      'limit': limit,
+      'offset': offset,
+    });
+    return Paginated.fromJson(_asMap(res.data), NotificationItem.fromJson);
+  }
+
+  /// Cheap poll target — no push channel exists (§5).
+  Future<int> unreadNotificationCount() async {
+    final res = await _request('GET', '/notifications/unread-count/');
+    return (_asMap(res.data)['unread'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Idempotent; there is no mark-unread.
+  Future<NotificationItem> markNotificationRead(int id) async {
+    final res = await _request('POST', '/notifications/$id/read/');
+    return NotificationItem.fromJson(_asMap(res.data));
+  }
+
+  /// → number of rows marked.
+  Future<int> markAllNotificationsRead() async {
+    final res = await _request('POST', '/notifications/read-all/');
+    return (_asMap(res.data)['marked'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<NotificationPreferences> notificationPreferences() async {
+    final res = await _request('GET', '/notifications/preferences/');
+    return NotificationPreferences.fromJson(_asMap(res.data));
+  }
+
+  Future<NotificationPreferences> patchNotificationPreferences(
+      Map<String, bool> patch) async {
+    final res =
+        await _request('PATCH', '/notifications/preferences/', data: patch);
+    return NotificationPreferences.fromJson(_asMap(res.data));
+  }
+
+  /// PUT/DELETE are both idempotent 204s; watching needs `view` (404 otherwise).
+  Future<void> setDocumentWatch(String uuid, bool watch) async {
+    await _request(watch ? 'PUT' : 'DELETE', '/documents/$uuid/watch/');
+  }
+
+  /// Watching a type covers its whole subtree (ACL inheritance direction).
+  Future<void> setTypeWatch(String slug, bool watch) async {
+    await _request(watch ? 'PUT' : 'DELETE', '/document-types/$slug/watch/');
+  }
+
+  /// Bare array of the caller's watches — small, cache per session.
+  Future<List<Watch>> watches() async {
+    final res = await _request('GET', '/watches/');
+    return ((res.data as List?) ?? const [])
+        .map((e) => Watch.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Username autocomplete for the @-picker (§3). Pass [documentUuid] so
+  /// `can_view` reflects the document being commented on.
+  Future<List<UserSuggestion>> userSuggestions({
+    String? search,
+    String? documentUuid,
+    int limit = 10,
+  }) async {
+    final res = await _request('GET', '/users/', query: {
+      'search': ?search,
+      'document': ?documentUuid,
+      'limit': limit,
+    });
+    return ((res.data as List?) ?? const [])
+        .map((e) => UserSuggestion.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
   }
 
   // ---- Admin: document types ----

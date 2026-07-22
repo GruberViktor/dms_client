@@ -4,16 +4,22 @@ import '../models/models.dart';
 
 /// Renders the document-type tree (built from parent_slug) as an expandable
 /// list. Selecting a node filters by that type (server includes descendants).
+/// When [onToggleWatch] is set, each node gets a bell to watch the category —
+/// a type watch covers the whole subtree (notifications hand-off §2).
 class TypeTree extends StatefulWidget {
   final List<DocumentType> types;
   final String? selectedSlug;
   final ValueChanged<String?> onSelected;
+  final Set<String> watchedSlugs;
+  final ValueChanged<String>? onToggleWatch;
 
   const TypeTree({
     super.key,
     required this.types,
     required this.selectedSlug,
     required this.onSelected,
+    this.watchedSlugs = const {},
+    this.onToggleWatch,
   });
 
   @override
@@ -57,9 +63,27 @@ class _TypeTreeState extends State<TypeTree> {
                 ? null
                 : TextStyle(color: Theme.of(context).disabledColor),
           ),
-          trailing: kids.isEmpty
-              ? null
-              : IconButton(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.onToggleWatch != null)
+                IconButton(
+                  tooltip: widget.watchedSlugs.contains(t.slug)
+                      ? 'Stop watching this category'
+                      : 'Watch this category (incl. subtypes)',
+                  icon: Icon(
+                    widget.watchedSlugs.contains(t.slug)
+                        ? Icons.notifications_active
+                        : Icons.notifications_none_outlined,
+                    size: 18,
+                    color: widget.watchedSlugs.contains(t.slug)
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outline,
+                  ),
+                  onPressed: () => widget.onToggleWatch!(t.slug),
+                ),
+              if (kids.isNotEmpty)
+                IconButton(
                   icon: Icon(
                     collapsed ? Icons.chevron_right : Icons.expand_more,
                     size: 20,
@@ -68,6 +92,8 @@ class _TypeTreeState extends State<TypeTree> {
                     collapsed ? _collapsed.remove(t.slug) : _collapsed.add(t.slug);
                   }),
                 ),
+            ],
+          ),
           onTap: () => widget.onSelected(t.slug),
         ));
         if (!collapsed) addNodes(t.slug);

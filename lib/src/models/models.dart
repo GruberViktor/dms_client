@@ -278,6 +278,51 @@ class Document {
   }
 }
 
+/// A flat, plain-text comment on a document (comments hand-off §3).
+/// `canEdit`/`canDelete` are resolved server-side for the calling user —
+/// drive the affordances off them, never compute permissions client-side.
+class DocumentComment {
+  final int id;
+  final String author;
+  final int authorId;
+  final String body;
+  final DateTime createdAt;
+  final DateTime? editedAt;
+  final String? editedBy; // may differ from author (moderation)
+  final bool isEdited;
+  final bool canEdit;
+  final bool canDelete;
+
+  DocumentComment({
+    required this.id,
+    required this.author,
+    required this.authorId,
+    required this.body,
+    required this.createdAt,
+    required this.editedAt,
+    required this.editedBy,
+    required this.isEdited,
+    required this.canEdit,
+    required this.canDelete,
+  });
+
+  factory DocumentComment.fromJson(Map<String, dynamic> json) =>
+      DocumentComment(
+        id: (json['id'] as num).toInt(),
+        author: (json['author'] as String?) ?? '',
+        authorId: (json['author_id'] as num?)?.toInt() ?? 0,
+        body: (json['body'] as String?) ?? '',
+        createdAt: DateTime.parse(json['created_at'] as String),
+        editedAt: json['edited_at'] != null
+            ? DateTime.tryParse(json['edited_at'] as String)
+            : null,
+        editedBy: json['edited_by'] as String?,
+        isEdited: _asBool(json['is_edited']) || json['edited_at'] != null,
+        canEdit: _asBool(json['can_edit']),
+        canDelete: _asBool(json['can_delete']),
+      );
+}
+
 class VersionDiff {
   final int? fromVersion;
   final int? toVersion;
@@ -329,6 +374,23 @@ sealed class TimelineEvent {
             : null,
       );
     }
+    if (json['kind'] == 'comment') {
+      return CommentEvent(
+        timestamp: ts,
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        author: (json['author'] as String?) ?? '',
+        body: (json['body'] as String?) ?? '',
+        editedAt: json['edited_at'] != null
+            ? DateTime.tryParse(json['edited_at'] as String)
+            : null,
+        editedBy: json['edited_by'] as String?,
+        isDeleted: _asBool(json['is_deleted']),
+        deletedAt: json['deleted_at'] != null
+            ? DateTime.tryParse(json['deleted_at'] as String)
+            : null,
+        deletedBy: json['deleted_by'] as String?,
+      );
+    }
     return AuditEvent(
       timestamp: ts,
       action: (json['action'] as String?) ?? 'unknown',
@@ -378,6 +440,32 @@ class VersionEvent extends TimelineEvent {
     required this.hiddenBy,
     required this.hiddenReason,
     required this.diff,
+  }) : super(timestamp);
+}
+
+/// A comment mixed into the timeline (comments hand-off §4). Soft-deleted
+/// comments stay in the timeline with `isDeleted` set (only the comments API
+/// excludes them) — render like hidden versions: struck through, not hidden.
+class CommentEvent extends TimelineEvent {
+  final int id;
+  final String author;
+  final String body;
+  final DateTime? editedAt;
+  final String? editedBy;
+  final bool isDeleted;
+  final DateTime? deletedAt;
+  final String? deletedBy;
+
+  CommentEvent({
+    required DateTime timestamp,
+    required this.id,
+    required this.author,
+    required this.body,
+    required this.editedAt,
+    required this.editedBy,
+    required this.isDeleted,
+    required this.deletedAt,
+    required this.deletedBy,
   }) : super(timestamp);
 }
 
@@ -574,7 +662,136 @@ const aclPermissions = [
   'archive',
   'download',
   'manage_acl',
+  'comment',
+  'edit_any_comment',
+  'delete_any_comment',
 ];
+
+/// One inbox row (notifications hand-off §2). Named to avoid clashing with
+/// Flutter's `Notification`. Render from [payload] — it snapshots the
+/// document title/uuid at event time and survives deletion, unlike
+/// [documentUuid] which is nulled when the document is gone.
+class NotificationItem {
+  final int id;
+  final String kind; // mention | watched_document | watched_type | workflow | future values
+  final String action; // audit action that triggered it; "" for workflow
+  final String? actor; // username; null if the account was deleted
+  final String? documentUuid; // null once the document is gone
+  final Map<String, dynamic> payload;
+  final DateTime createdAt;
+  final DateTime? readAt;
+  final bool isRead;
+
+  NotificationItem({
+    required this.id,
+    required this.kind,
+    required this.action,
+    required this.actor,
+    required this.documentUuid,
+    required this.payload,
+    required this.createdAt,
+    required this.readAt,
+    required this.isRead,
+  });
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) =>
+      NotificationItem(
+        id: (json['id'] as num).toInt(),
+        kind: (json['kind'] as String?) ?? '',
+        action: (json['action'] as String?) ?? '',
+        actor: json['actor'] as String?,
+        documentUuid: json['document'] as String?,
+        payload: (json['payload'] as Map?)?.cast<String, dynamic>() ?? {},
+        createdAt: DateTime.parse(json['created_at'] as String),
+        readAt: json['read_at'] != null
+            ? DateTime.tryParse(json['read_at'] as String)
+            : null,
+        isRead: _asBool(json['is_read']) || json['read_at'] != null,
+      );
+
+  String get payloadDocumentTitle =>
+      (payload['document_title'] as String?) ?? '';
+  String? get payloadDocumentUuid => payload['document_uuid'] as String?;
+  int? get commentId => (payload['comment_id'] as num?)?.toInt();
+  String? get bodyExcerpt => payload['body_excerpt'] as String?;
+  int? get version => (payload['version'] as num?)?.toInt();
+  List<String> get changedFields =>
+      ((payload['changed_fields'] as List?) ?? const []).map((e) => '$e').toList();
+
+  NotificationItem asRead() => NotificationItem(
+        id: id,
+        kind: kind,
+        action: action,
+        actor: actor,
+        documentUuid: documentUuid,
+        payload: payload,
+        createdAt: createdAt,
+        readAt: readAt ?? DateTime.now(),
+        isRead: true,
+      );
+}
+
+/// Per-user email gates (§4) — the in-app inbox always gets the row.
+class NotificationPreferences {
+  final bool emailMentions;
+  final bool emailWatches;
+  final bool emailWorkflow;
+
+  NotificationPreferences({
+    required this.emailMentions,
+    required this.emailWatches,
+    required this.emailWorkflow,
+  });
+
+  factory NotificationPreferences.fromJson(Map<String, dynamic> json) =>
+      NotificationPreferences(
+        emailMentions: _asBool(json['email_mentions']),
+        emailWatches: _asBool(json['email_watches']),
+        emailWorkflow: _asBool(json['email_workflow']),
+      );
+}
+
+/// One watch of the calling user — exactly one of [documentUuid] /
+/// [documentType] is set (notifications hand-off §2).
+class Watch {
+  final int id;
+  final String? documentUuid;
+  final String? documentTitle;
+  final String? documentType; // slug; covers the whole subtree
+  final DateTime? createdAt;
+
+  Watch({
+    required this.id,
+    required this.documentUuid,
+    required this.documentTitle,
+    required this.documentType,
+    required this.createdAt,
+  });
+
+  factory Watch.fromJson(Map<String, dynamic> json) => Watch(
+        id: (json['id'] as num).toInt(),
+        documentUuid: json['document'] as String?,
+        documentTitle: json['document_title'] as String?,
+        documentType: json['document_type'] as String?,
+        createdAt: json['created_at'] != null
+            ? DateTime.tryParse(json['created_at'] as String)
+            : null,
+      );
+}
+
+/// Row of the @-mention autocomplete (§3). `canView: false` means the mention
+/// would post as plain text and notify nobody — shown struck through.
+class UserSuggestion {
+  final String username;
+  final bool canView;
+
+  UserSuggestion({required this.username, required this.canView});
+
+  factory UserSuggestion.fromJson(Map<String, dynamic> json) => UserSuggestion(
+        username: (json['username'] as String?) ?? '',
+        canView: json['can_view'] != false,
+      );
+}
 
 class CurrentUser {
   final int id;

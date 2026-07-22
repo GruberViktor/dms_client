@@ -99,6 +99,57 @@ void main() {
     expect(doc.currentVersion?.number, 1);
   });
 
+  test('DocumentComment parses, including moderation edits', () {
+    final c = DocumentComment.fromJson({
+      'id': 42,
+      'author': 'alice',
+      'author_id': 7,
+      'body': 'Rechnung geprüft',
+      'created_at': '2026-07-22T09:14:03.512098Z',
+      'edited_at': '2026-07-22T10:00:00Z',
+      'edited_by': 'root',
+      'is_edited': true,
+      'can_edit': 'true', // booleans may arrive as strings
+      'can_delete': false,
+    });
+    expect(c.id, 42);
+    expect(c.author, 'alice');
+    expect(c.isEdited, true);
+    expect(c.editedBy, 'root');
+    expect(c.canEdit, true);
+    expect(c.canDelete, false);
+  });
+
+  test('TimelineEvent parses comment kind', () {
+    final e = TimelineEvent.fromJson({
+      'kind': 'comment',
+      'timestamp': '2026-07-22T09:14:03.512098Z',
+      'id': 42,
+      'author': 'alice',
+      'body': 'Rechnung geprüft',
+      'edited_at': null,
+      'edited_by': null,
+    });
+    expect(e, isA<CommentEvent>());
+    expect((e as CommentEvent).author, 'alice');
+    expect(e.editedAt, isNull);
+    expect(e.isDeleted, false);
+
+    final d = TimelineEvent.fromJson({
+      'kind': 'comment',
+      'timestamp': '2026-07-22T09:14:03.512098Z',
+      'id': 43,
+      'author': 'alice',
+      'body': 'gone',
+      'is_deleted': true,
+      'deleted_at': '2026-07-22T10:02:11.483920Z',
+      'deleted_by': 'root',
+    });
+    expect((d as CommentEvent).isDeleted, true);
+    expect(d.deletedBy, 'root');
+    expect(d.deletedAt, isNotNull);
+  });
+
   test('TimelineEvent parses both kinds', () {
     final v = TimelineEvent.fromJson({
       'kind': 'version',
@@ -132,5 +183,83 @@ void main() {
     });
     expect(a, isA<AuditEvent>());
     expect((a as AuditEvent).actor, isNull);
+  });
+
+  test('NotificationItem parses payload and tolerates sparse rows', () {
+    final n = NotificationItem.fromJson({
+      'id': 17,
+      'kind': 'mention',
+      'action': 'comment_add',
+      'actor': 'alice',
+      'document': '9e4a4d95-0000-0000-0000-000000000000',
+      'payload': {
+        'document_uuid': '9e4a4d95-0000-0000-0000-000000000000',
+        'document_title': 'Invoice 47',
+        'comment_id': 42,
+        'body_excerpt': '@bob check this',
+      },
+      'created_at': '2026-07-22T09:14:03.512098Z',
+      'read_at': null,
+      'is_read': false,
+    });
+    expect(n.isRead, isFalse);
+    expect(n.payloadDocumentTitle, 'Invoice 47');
+    expect(n.commentId, 42);
+    expect(n.bodyExcerpt, '@bob check this');
+    expect(n.asRead().isRead, isTrue);
+
+    // Delete event: document FK nulled, unknown kind must not crash (§2).
+    final gone = NotificationItem.fromJson({
+      'id': 18,
+      'kind': 'workflow',
+      'action': '',
+      'actor': null,
+      'document': null,
+      'payload': {'document_uuid': 'x', 'document_title': 'Old doc'},
+      'created_at': '2026-07-22T09:14:03Z',
+      'read_at': '2026-07-22T10:00:00Z',
+      'is_read': true,
+    });
+    expect(gone.documentUuid, isNull);
+    expect(gone.actor, isNull);
+    expect(gone.isRead, isTrue);
+    expect(gone.changedFields, isEmpty);
+    expect(gone.version, isNull);
+  });
+
+  test('Watch parses both variants (exactly one target set)', () {
+    final docWatch = Watch.fromJson({
+      'id': 1,
+      'document': 'uuid-1',
+      'document_title': 'Invoice 47',
+      'document_type': null,
+      'created_at': '2026-07-22T09:00:00Z',
+    });
+    expect(docWatch.documentUuid, 'uuid-1');
+    expect(docWatch.documentType, isNull);
+
+    final typeWatch = Watch.fromJson({
+      'id': 2,
+      'document': null,
+      'document_title': null,
+      'document_type': 'invoices',
+      'created_at': '2026-07-22T09:00:00Z',
+    });
+    expect(typeWatch.documentUuid, isNull);
+    expect(typeWatch.documentType, 'invoices');
+  });
+
+  test('NotificationPreferences and UserSuggestion parse', () {
+    final p = NotificationPreferences.fromJson(
+        {'email_mentions': true, 'email_watches': false, 'email_workflow': true});
+    expect(p.emailMentions, isTrue);
+    expect(p.emailWatches, isFalse);
+    expect(p.emailWorkflow, isTrue);
+
+    final u = UserSuggestion.fromJson({'username': 'bodo', 'can_view': false});
+    expect(u.username, 'bodo');
+    expect(u.canView, isFalse);
+    // can_view is only advisory and defaults to true when absent.
+    expect(UserSuggestion.fromJson({'username': 'bob'}).canView, isTrue);
   });
 }

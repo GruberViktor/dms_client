@@ -1,12 +1,16 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:decimal/decimal.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/api_client.dart';
 import '../models/models.dart';
 import '../state/session.dart';
+import '../state/watches.dart';
+import '../util/format.dart';
 import '../widgets/common.dart';
 import '../widgets/date_range_dropdown.dart';
 import '../widgets/document_card.dart';
@@ -14,19 +18,17 @@ import '../widgets/type_tree.dart';
 import 'document_detail_screen.dart';
 import 'upload_screen.dart';
 
-enum ArchivedFilter { active, all, archived }
-
 class DocumentFilters {
   final String query;
   final String? typeSlug;
-  final ArchivedFilter archived;
+  final bool archivedOnly;
   final DateTimeRange? dateRange;
   final Map<String, String> metadata;
 
   const DocumentFilters({
     this.query = '',
     this.typeSlug,
-    this.archived = ArchivedFilter.active,
+    this.archivedOnly = false,
     this.dateRange,
     this.metadata = const {},
   });
@@ -34,25 +36,20 @@ class DocumentFilters {
   DocumentFilters copyWith({
     String? query,
     String? Function()? typeSlug,
-    ArchivedFilter? archived,
+    bool? archivedOnly,
     DateTimeRange? Function()? dateRange,
     Map<String, String>? metadata,
-  }) =>
-      DocumentFilters(
-        query: query ?? this.query,
-        typeSlug: typeSlug != null ? typeSlug() : this.typeSlug,
-        archived: archived ?? this.archived,
-        dateRange: dateRange != null ? dateRange() : this.dateRange,
-        metadata: metadata ?? this.metadata,
-      );
+  }) => DocumentFilters(
+    query: query ?? this.query,
+    typeSlug: typeSlug != null ? typeSlug() : this.typeSlug,
+    archivedOnly: archivedOnly ?? this.archivedOnly,
+    dateRange: dateRange != null ? dateRange() : this.dateRange,
+    metadata: metadata ?? this.metadata,
+  );
 
   bool get searching => query.isNotEmpty;
 
-  String? get archivedParam => switch (archived) {
-        ArchivedFilter.active => null,
-        ArchivedFilter.all => 'true',
-        ArchivedFilter.archived => 'only',
-      };
+  String? get archivedParam => archivedOnly ? 'only' : null;
 }
 
 class DocumentListScreen extends ConsumerStatefulWidget {
@@ -198,14 +195,22 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   }
 
   Future<void> _editMetadataFilter() async {
+    // Suggest the selected type's merged field set (inherited included); with
+    // no type selected there is nothing type-specific to offer.
+    final slug = _filters.typeSlug;
+    final fields = slug == null
+        ? const <MetadataFieldDef>[]
+        : mergedMetadataFields(ref.read(documentTypesBySlugProvider), slug);
     final result = await showDialog<MapEntry<String, String>?>(
       context: context,
-      builder: (_) => const _MetadataFilterDialog(),
+      builder: (_) => _MetadataFilterDialog(fields: fields),
     );
     if (result != null) {
-      _applyFilters(_filters.copyWith(
-        metadata: {..._filters.metadata, result.key: result.value},
-      ));
+      _applyFilters(
+        _filters.copyWith(
+          metadata: {..._filters.metadata, result.key: result.value},
+        ),
+      );
     }
   }
 
@@ -216,9 +221,9 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     if (items.length > 1) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(
-          content: Text('Drop one file at a time to upload.'),
-        ));
+        ..showSnackBar(
+          const SnackBar(content: Text('Drop one file at a time to upload.')),
+        );
       return;
     }
     final x = items.first;
@@ -226,17 +231,37 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     // for platforms where it does not (e.g. web).
     final Uint8List? bytes = x.path.isEmpty ? await x.readAsBytes() : null;
     if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => UploadScreen(
-        initialTypeSlug: _filters.typeSlug,
-        initialFile: PickedFile(
-          filename: x.name,
-          path: x.path.isEmpty ? null : x.path,
-          bytes: bytes,
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UploadScreen(
+          initialTypeSlug: _filters.typeSlug,
+          initialFile: PickedFile(
+            filename: x.name,
+            path: x.path.isEmpty ? null : x.path,
+            bytes: bytes,
+          ),
         ),
       ),
-    ));
+    );
     _reload();
+  }
+
+  /// Watch/unwatch a category — covers the whole subtree (notifications
+  /// hand-off §2). Optimistic; the notifier reverts on failure.
+  Future<void> _toggleTypeWatch(String slug) async {
+    try {
+      final on = await ref.read(watchesProvider.notifier).toggleType(slug);
+      if (mounted) {
+        showSnack(
+          context,
+          on
+              ? 'Watching this category and its subtypes.'
+              : 'No longer watching this category.',
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) showSnack(context, e.detail);
+    }
   }
 
   @override
@@ -279,6 +304,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 Navigator.of(context).pop();
                 _applyFilters(_filters.copyWith(typeSlug: () => slug));
               },
+              watchedSlugs: ref.watch(watchesProvider).types,
+              onToggleWatch: _toggleTypeWatch,
             ),
             error: (e, _) => ErrorRetry(
               error: e,
@@ -310,9 +337,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         icon: const Icon(Icons.upload_file),
         label: const Text('Upload'),
         onPressed: () async {
-          await Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => UploadScreen(initialTypeSlug: _filters.typeSlug),
-          ));
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => UploadScreen(initialTypeSlug: _filters.typeSlug),
+            ),
+          );
           _reload();
         },
       ),
@@ -334,14 +363,17 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.file_download_outlined,
-                    size: 48, color: scheme.onPrimaryContainer),
+                Icon(
+                  Icons.file_download_outlined,
+                  size: 48,
+                  color: scheme.onPrimaryContainer,
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'Drop file to upload',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: scheme.onPrimaryContainer,
-                      ),
+                    color: scheme.onPrimaryContainer,
+                  ),
                 ),
               ],
             ),
@@ -378,12 +410,15 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                   filled: true,
                   fillColor: theme.colorScheme.surfaceContainerHighest,
                   hintText: 'Search title, metadata, full text',
-                  hintStyle: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.outline),
+                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
                   contentPadding: EdgeInsets.zero,
                   prefixIcon: const Icon(Icons.search, size: 20),
-                  prefixIconConstraints:
-                      const BoxConstraints(minWidth: 38, minHeight: height),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 38,
+                    minHeight: height,
+                  ),
                   suffixIcon: ValueListenableBuilder<bool>(
                     valueListenable: _showClear,
                     builder: (context, show, _) => show
@@ -396,8 +431,10 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                           )
                         : const SizedBox.shrink(),
                   ),
-                  suffixIconConstraints:
-                      const BoxConstraints(minWidth: 38, minHeight: height),
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 38,
+                    minHeight: height,
+                  ),
                   border: border,
                   enabledBorder: border,
                   focusedBorder: border.copyWith(
@@ -427,8 +464,9 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 filled: true,
                 fillColor: theme.colorScheme.surfaceContainerHighest,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                hintStyle: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.outline),
+                hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
                 border: border,
                 enabledBorder: border,
                 focusedBorder: border.copyWith(
@@ -437,7 +475,9 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               ),
               dropdownMenuEntries: [
                 const DropdownMenuEntry<String?>(
-                    value: null, label: 'All types'),
+                  value: null,
+                  label: 'All types',
+                ),
                 for (final t in types)
                   DropdownMenuEntry<String?>(
                     value: t.slug,
@@ -459,25 +499,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          SegmentedButton<ArchivedFilter>(
-            segments: const [
-              ButtonSegment(
-                  value: ArchivedFilter.active, label: Text('Active')),
-              ButtonSegment(value: ArchivedFilter.all, label: Text('All')),
-              ButtonSegment(
-                  value: ArchivedFilter.archived, label: Text('Archived')),
-            ],
-            selected: {_filters.archived},
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-            ),
-            onSelectionChanged: (s) =>
-                _applyFilters(_filters.copyWith(archived: s.first)),
-          ),
           // Date range and metadata filters are list-only server-side.
           if (!_filters.searching) ...[
-            const SizedBox(width: 8),
             DateRangeDropdown(
               value: _filters.dateRange,
               firstDate: DateTime(2000),
@@ -501,14 +524,24 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               label: const Text('Metadata filter'),
               onPressed: _editMetadataFilter,
             ),
+            const SizedBox(width: 8),
           ],
+          FilterChip(
+            label: const Text('Archived'),
+            selected: _filters.archivedOnly,
+            visualDensity: VisualDensity.compact,
+            showCheckmark: true,
+            tooltip: 'Show only archived documents',
+            onSelected: (on) =>
+                _applyFilters(_filters.copyWith(archivedOnly: on)),
+          ),
           if (_filters.searching && _initialLoaded && _error == null) ...[
             const SizedBox(width: 12),
             Text(
               _count == 1 ? '1 result' : '$_count results',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ],
@@ -525,9 +558,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     }
     if (_resultCount == 0) {
       return Center(
-        child: Text(_filters.searching
-            ? 'No documents match “${_filters.query}”.'
-            : 'No documents match the filters.'),
+        child: Text(
+          _filters.searching
+              ? 'No documents match “${_filters.query}”.'
+              : 'No documents match the filters.',
+        ),
       );
     }
     return RefreshIndicator(onRefresh: _reload, child: _buildGrid(bySlug));
@@ -573,16 +608,20 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   }
 
   Future<void> _openDocument(String uuid) async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => DocumentDetailScreen(uuid: uuid),
-    ));
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => DocumentDetailScreen(uuid: uuid)));
     // Archive state etc. may have changed.
     _reload();
   }
 }
 
 class _MetadataFilterDialog extends StatefulWidget {
-  const _MetadataFilterDialog();
+  const _MetadataFilterDialog({required this.fields});
+
+  /// Merged field set of the selected type; empty when no type is selected,
+  /// in which case the key is free text.
+  final List<MetadataFieldDef> fields;
 
   @override
   State<_MetadataFilterDialog> createState() => _MetadataFilterDialogState();
@@ -590,51 +629,287 @@ class _MetadataFilterDialog extends StatefulWidget {
 
 class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
   final _keyCtrl = TextEditingController();
+  final _keyFocus = FocusNode();
   final _valueCtrl = TextEditingController();
+
+  /// The value as it goes on the wire. Text-ish types mirror `_valueCtrl`;
+  /// bool and date are picked, so they only live here.
+  String _value = '';
+  String? _matchedKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _keyCtrl.addListener(_onKeyChanged);
+  }
 
   @override
   void dispose() {
     _keyCtrl.dispose();
+    _keyFocus.dispose();
     _valueCtrl.dispose();
     super.dispose();
   }
 
+  /// A different known key means a different value editor, so the old value
+  /// (formatted for the previous type) is dropped.
+  void _onKeyChanged() {
+    final m = _matched;
+    if (m?.key == _matchedKey) {
+      setState(() {});
+      return;
+    }
+    setState(() {
+      _matchedKey = m?.key;
+      _valueCtrl.clear();
+      // A bool filter has only two values — start on the useful one.
+      _value = m?.fieldType == FieldType.boolean ? 'true' : '';
+    });
+  }
+
+  MetadataFieldDef? get _matched {
+    final k = _keyCtrl.text.trim();
+    for (final f in widget.fields) {
+      if (f.key == k) return f;
+    }
+    return null;
+  }
+
+  void _submit() {
+    final k = _keyCtrl.text.trim();
+    if (k.isEmpty) return;
+    Navigator.pop(context, MapEntry(k, _value.trim()));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final matched = _matched;
     return AlertDialog(
       title: const Text('Filter by metadata'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _keyCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Key',
-              hintText: 'e.g. invoice_number',
-            ),
-            autofocus: true,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _valueCtrl,
-            decoration: const InputDecoration(labelText: 'Value'),
-          ),
-        ],
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _keyField(),
+            const SizedBox(height: 8),
+            _valueField(matched),
+          ],
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: () {
-            final k = _keyCtrl.text.trim();
-            if (k.isEmpty) return;
-            Navigator.pop(context, MapEntry(k, _valueCtrl.text.trim()));
-          },
-          child: const Text('Apply'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('Apply')),
       ],
     );
+  }
+
+  Widget _keyField() {
+    final decoration = InputDecoration(
+      labelText: 'Key',
+      hintText: widget.fields.isEmpty ? 'e.g. invoice_number' : null,
+      helperText: widget.fields.isEmpty
+          ? 'Select a document type to get key suggestions'
+          : null,
+      suffixIcon: widget.fields.isEmpty
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.arrow_drop_down),
+              tooltip: 'Show fields',
+              // Re-focusing an already focused field does not reopen the
+              // options list, so drop focus first.
+              onPressed: () {
+                _keyFocus.unfocus();
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _keyFocus.requestFocus(),
+                );
+              },
+            ),
+    );
+    if (widget.fields.isEmpty) {
+      return TextField(
+        controller: _keyCtrl,
+        focusNode: _keyFocus,
+        decoration: decoration,
+        autofocus: true,
+        onSubmitted: (_) => _submit(),
+      );
+    }
+    return RawAutocomplete<MetadataFieldDef>(
+      textEditingController: _keyCtrl,
+      focusNode: _keyFocus,
+      displayStringForOption: (f) => f.key,
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return widget.fields;
+        return widget.fields.where(
+          (f) =>
+              f.key.toLowerCase().contains(q) ||
+              f.label.toLowerCase().contains(q),
+        );
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) =>
+          TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: decoration,
+            autofocus: true,
+            onSubmitted: (_) => onFieldSubmitted(),
+          ),
+      // The key listener resets the value; nothing to do on selection.
+      onSelected: (_) {},
+      optionsViewBuilder: (context, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 260, maxWidth: 360),
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: options.length,
+              itemBuilder: (context, i) {
+                final f = options.elementAt(i);
+                return ListTile(
+                  dense: true,
+                  title: Text(f.label),
+                  subtitle: Text('${f.key} · ${f.fieldType.name}'),
+                  onTap: () => onSelected(f),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One editor per field type, each producing the wire form the server
+  /// stores in `metadata` (bool → true/false, monetary → decimal string,
+  /// date → YYYY-MM-DD). Unknown keys stay free text.
+  Widget _valueField(MetadataFieldDef? f) {
+    final helper = f != null ? '${f.label} · ${f.fieldType.name}' : null;
+    switch (f?.fieldType) {
+      case FieldType.boolean:
+        return InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Value',
+            helperText: helper,
+            border: const OutlineInputBorder(),
+          ),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'true', label: Text('true')),
+              ButtonSegment(value: 'false', label: Text('false')),
+            ],
+            selected: {if (_value == 'true' || _value == 'false') _value},
+            emptySelectionAllowed: true,
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            onSelectionChanged: (s) => setState(() => _value = s.first),
+          ),
+        );
+      case FieldType.date:
+        return InkWell(
+          onTap: _pickDate,
+          borderRadius: BorderRadius.circular(4),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Value',
+              helperText: helper,
+              suffixIcon: _value.isEmpty
+                  ? const Icon(Icons.calendar_today_outlined, size: 18)
+                  : IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'Clear',
+                      onPressed: () => setState(() => _value = ''),
+                    ),
+            ),
+            child: Text(_value.isEmpty ? ' ' : formatDate(_value)),
+          ),
+        );
+      case FieldType.integer:
+        return _textValueField(
+          helper: helper,
+          hint: 'e.g. 42',
+          keyboardType: const TextInputType.numberWithOptions(signed: true),
+          formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
+        );
+      case FieldType.float:
+      case FieldType.monetary:
+        return _textValueField(
+          helper: helper,
+          hint: 'e.g. 1234.56',
+          keyboardType: const TextInputType.numberWithOptions(
+            decimal: true,
+            signed: true,
+          ),
+          formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,-]'))],
+          // Monetary values are compared as strings, so the comma form has to
+          // be normalized the same way the upload form normalizes it.
+          transform: f?.fieldType == FieldType.monetary
+              ? _normalizeDecimal
+              : null,
+        );
+      case FieldType.url:
+        return _textValueField(
+          helper: helper,
+          hint: 'https://…',
+          keyboardType: TextInputType.url,
+        );
+      default:
+        return _textValueField(
+          helper: helper,
+          hint: f == null ? null : 'exact value',
+        );
+    }
+  }
+
+  Widget _textValueField({
+    String? helper,
+    String? hint,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? formatters,
+    String Function(String)? transform,
+  }) {
+    return TextField(
+      controller: _valueCtrl,
+      decoration: InputDecoration(
+        labelText: 'Value',
+        hintText: hint,
+        helperText: helper,
+      ),
+      keyboardType: keyboardType,
+      inputFormatters: formatters,
+      onChanged: (v) =>
+          _value = transform != null ? transform(v.trim()) : v.trim(),
+      onSubmitted: (_) => _submit(),
+    );
+  }
+
+  static String _normalizeDecimal(String text) {
+    try {
+      return Decimal.parse(text.replaceAll(',', '.')).toString();
+    } on FormatException {
+      return text;
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(_value) ?? now,
+      firstDate: DateTime(1990),
+      lastDate: DateTime(now.year + 10),
+    );
+    if (picked != null) {
+      setState(() => _value = picked.toIso8601String().substring(0, 10));
+    }
   }
 }
