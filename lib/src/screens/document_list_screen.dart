@@ -60,17 +60,21 @@ class DocumentListScreen extends ConsumerStatefulWidget {
 }
 
 class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
+  static const _pageSize = 50;
+
   DocumentFilters _filters = const DocumentFilters();
   final _scrollCtrl = ScrollController();
   final _queryCtrl = TextEditingController();
+  final _queryFocus = FocusNode();
   final _showClear = ValueNotifier<bool>(false);
   Timer? _debounce;
 
   // Browsing fills `_docs`, searching fills `_hits`; only one is live at a
-  // time (see `_filters.searching`).
+  // time (see `_filters.searching`). Both hold exactly the current page.
   final List<Document> _docs = [];
   final List<SearchHit> _hits = [];
   int _count = 0;
+  int _page = 0;
   bool _loading = false;
   bool _initialLoaded = false;
   Object? _error;
@@ -79,10 +83,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
 
   int get _resultCount => _filters.searching ? _hits.length : _docs.length;
 
+  int get _pageCount => (_count + _pageSize - 1) ~/ _pageSize;
+
   @override
   void initState() {
     super.initState();
-    _scrollCtrl.addListener(_maybeLoadMore);
     _reload();
   }
 
@@ -90,70 +95,77 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   void dispose() {
     _debounce?.cancel();
     _queryCtrl.dispose();
+    _queryFocus.dispose();
     _showClear.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
 
-  void _maybeLoadMore() {
-    if (_scrollCtrl.position.extentAfter < 400 &&
-        !_loading &&
-        _resultCount < _count) {
-      _loadPage(_resultCount);
-    }
+  Future<void> _reload() => _loadPage(_page);
+
+  Future<void> _goToPage(int page) async {
+    setState(() => _page = page);
+    await _loadPage(page);
+    if (mounted && _scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
   }
 
-  Future<void> _reload() async {
+  Future<void> _loadPage(int page) async {
+    final gen = ++_requestGen;
     setState(() {
-      _docs.clear();
-      _hits.clear();
-      _count = 0;
-      _initialLoaded = false;
+      _loading = true;
       _error = null;
     });
-    await _loadPage(0);
-  }
-
-  Future<void> _loadPage(int offset) async {
-    final gen = ++_requestGen;
-    setState(() => _loading = true);
+    final offset = page * _pageSize;
     try {
       final api = ref.read(apiProvider);
       final f = _filters;
       if (f.searching) {
         // The search endpoint only knows q/type/archived — the date range and
         // metadata filters are hidden while a query is active.
-        final page = await api.search(
+        final res = await api.search(
           f.query,
           type: f.typeSlug,
           archived: f.archivedParam,
+          limit: _pageSize,
           offset: offset,
         );
         if (!mounted || gen != _requestGen) return;
         setState(() {
-          if (offset == 0) _hits.clear();
-          _hits.addAll(page.results);
-          _count = page.count;
+          _hits
+            ..clear()
+            ..addAll(res.results);
+          _docs.clear();
+          _count = res.count;
           _initialLoaded = true;
           _loading = false;
         });
       } else {
-        final page = await api.documents(
+        final res = await api.documents(
           type: f.typeSlug,
           archived: f.archivedParam,
           dateFrom: f.dateRange?.start.toIso8601String().substring(0, 10),
           dateTo: f.dateRange?.end.toIso8601String().substring(0, 10),
           metadataFilters: f.metadata,
+          limit: _pageSize,
           offset: offset,
         );
         if (!mounted || gen != _requestGen) return;
         setState(() {
-          if (offset == 0) _docs.clear();
-          _docs.addAll(page.results);
-          _count = page.count;
+          _docs
+            ..clear()
+            ..addAll(res.results);
+          _hits.clear();
+          _count = res.count;
           _initialLoaded = true;
           _loading = false;
         });
+      }
+      // The page can fall off the end when documents are deleted or filters
+      // shrink the set — snap back to the last page that still exists.
+      if (_resultCount == 0 && _count > 0 && page > 0) {
+        final last = (_count - 1) ~/ _pageSize;
+        setState(() => _page = last);
+        await _loadPage(last);
       }
     } catch (e) {
       if (!mounted || gen != _requestGen) return;
@@ -166,8 +178,20 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   }
 
   void _applyFilters(DocumentFilters f) {
-    setState(() => _filters = f);
+    setState(() {
+      _filters = f;
+      _page = 0;
+    });
     _reload();
+  }
+
+  void _focusSearch() {
+    _queryFocus.requestFocus();
+    // Select the existing query so typing starts a fresh search.
+    _queryCtrl.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _queryCtrl.text.length,
+    );
   }
 
   void _onQueryChanged(String value) {
@@ -272,78 +296,147 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         ? (bySlug[_filters.typeSlug]?.name ?? _filters.typeSlug!)
         : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(typeName ?? 'Documents'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _reload,
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _focusSearch,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(typeName ?? 'Documents'),
+            actions: [
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: _reload,
+              ),
+              if (MediaQuery.sizeOf(context).width < 700)
+                PopupMenuButton<String>(
+                  onSelected: (v) {
+                    if (v == 'logout') {
+                      ref.read(sessionProvider.notifier).logout();
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'logout', child: Text('Sign out')),
+                  ],
+                ),
+            ],
           ),
-          if (MediaQuery.sizeOf(context).width < 700)
-            PopupMenuButton<String>(
-              onSelected: (v) {
-                if (v == 'logout') {
-                  ref.read(sessionProvider.notifier).logout();
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'logout', child: Text('Sign out')),
+          drawer: Drawer(
+            child: SafeArea(
+              child: typesAsync.when(
+                data: (types) => TypeTree(
+                  types: types,
+                  selectedSlug: _filters.typeSlug,
+                  onSelected: (slug) {
+                    Navigator.of(context).pop();
+                    _applyFilters(_filters.copyWith(typeSlug: () => slug));
+                  },
+                  watchedSlugs: ref.watch(watchesProvider).types,
+                  onToggleWatch: _toggleTypeWatch,
+                ),
+                error: (e, _) => ErrorRetry(
+                  error: e,
+                  onRetry: () => ref.invalidate(documentTypesProvider),
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+          ),
+          body: DropTarget(
+            onDragEntered: (_) => setState(() => _dragging = true),
+            onDragExited: (_) => setState(() => _dragging = false),
+            onDragDone: _onDrop,
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    _buildSearchRow(context, typesAsync.value ?? const []),
+                    _buildFilterBar(context),
+                    const Divider(height: 1),
+                    // Keeps the previous page visible while the next one loads.
+                    if (_loading && _initialLoaded)
+                      const LinearProgressIndicator(minHeight: 2),
+                    Expanded(child: _buildResults(context, bySlug)),
+                    if (_pageCount > 1) ...[
+                      const Divider(height: 1),
+                      _buildPager(context),
+                    ],
+                  ],
+                ),
+                if (_dragging) _buildDropOverlay(context),
               ],
             ),
-        ],
-      ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: typesAsync.when(
-            data: (types) => TypeTree(
-              types: types,
-              selectedSlug: _filters.typeSlug,
-              onSelected: (slug) {
-                Navigator.of(context).pop();
-                _applyFilters(_filters.copyWith(typeSlug: () => slug));
-              },
-              watchedSlugs: ref.watch(watchesProvider).types,
-              onToggleWatch: _toggleTypeWatch,
-            ),
-            error: (e, _) => ErrorRetry(
-              error: e,
-              onRetry: () => ref.invalidate(documentTypesProvider),
-            ),
-            loading: () => const Center(child: CircularProgressIndicator()),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Upload'),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      UploadScreen(initialTypeSlug: _filters.typeSlug),
+                ),
+              );
+              _reload();
+            },
           ),
         ),
       ),
-      body: DropTarget(
-        onDragEntered: (_) => setState(() => _dragging = true),
-        onDragExited: (_) => setState(() => _dragging = false),
-        onDragDone: _onDrop,
-        child: Stack(
+    );
+  }
+
+  Widget _buildPager(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Column(
-              children: [
-                _buildSearchRow(context, typesAsync.value ?? const []),
-                _buildFilterBar(context),
-                const Divider(height: 1),
-                Expanded(child: _buildResults(context, bySlug)),
-              ],
+            IconButton(
+              icon: const Icon(Icons.first_page),
+              tooltip: 'First page',
+              visualDensity: VisualDensity.compact,
+              onPressed: _page > 0 ? () => _goToPage(0) : null,
             ),
-            if (_dragging) _buildDropOverlay(context),
+            IconButton(
+              icon: const Icon(Icons.chevron_left),
+              tooltip: 'Previous page',
+              visualDensity: VisualDensity.compact,
+              onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                'Page ${_page + 1} of $_pageCount',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right),
+              tooltip: 'Next page',
+              visualDensity: VisualDensity.compact,
+              onPressed: _page < _pageCount - 1
+                  ? () => _goToPage(_page + 1)
+                  : null,
+            ),
+            IconButton(
+              icon: const Icon(Icons.last_page),
+              tooltip: 'Last page',
+              visualDensity: VisualDensity.compact,
+              onPressed: _page < _pageCount - 1
+                  ? () => _goToPage(_pageCount - 1)
+                  : null,
+            ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.upload_file),
-        label: const Text('Upload'),
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => UploadScreen(initialTypeSlug: _filters.typeSlug),
-            ),
-          );
-          _reload();
-        },
       ),
     );
   }
@@ -401,6 +494,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               height: height,
               child: TextField(
                 controller: _queryCtrl,
+                focusNode: _queryFocus,
                 style: theme.textTheme.bodyMedium,
                 textInputAction: TextInputAction.search,
                 onChanged: _onQueryChanged,
@@ -582,11 +676,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
-      itemCount: _resultCount + (_resultCount < _count ? 1 : 0),
+      itemCount: _resultCount,
       itemBuilder: (context, i) {
-        if (i >= _resultCount) {
-          return const Center(child: CircularProgressIndicator());
-        }
         if (_filters.searching) {
           final h = _hits[i];
           return DocumentCard.hit(
