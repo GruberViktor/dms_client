@@ -63,17 +63,18 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
 
-# Launcher icons: assets/icon/logo.png is the master (white line art on
-# transparency); icon.png is it flattened on #242424 and icon_foreground.png is
-# the Android adaptive layer. `flutter pub run flutter_launcher_icons`
-# regenerates the Android mipmaps + adaptive icons and
-# windows/runner/resources/app_icon.ico from the sources below. Linux has no
-# generator support — its window icon is the bundled asset
+# Launcher icons: assets/icon/logo.png is the master (black line art on a white
+# tile, rounded corners); icon.png is it squared off on #ffffff — never ship the
+# master's rounded corners, the platforms round again — and icon_foreground.png
+# is the black art alone, inset to the Android adaptive safe zone.
+# `flutter pub run flutter_launcher_icons` regenerates the Android mipmaps +
+# adaptive icons and windows/runner/resources/app_icon.ico from the sources
+# below. Linux has no generator support — its window icon is the bundled asset
 # assets/icon/icon.png, loaded by linux/runner/my_application.cc.
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   android: true
-  adaptive_icon_background: "#242424"
+  adaptive_icon_background: "#ffffff"
   adaptive_icon_foreground: "assets/icon/icon_foreground.png"
   adaptive_icon_monochrome: "assets/icon/icon_foreground.png"
   windows:
