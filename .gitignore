@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release artifacts (scripts/release.sh)
+/dist/
+/dms_client-*.tar.gz
+/dms_client-*.apk
