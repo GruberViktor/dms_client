@@ -26,6 +26,8 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
   late String? _parentSlug = widget.existing?.parentSlug;
   late int? _retentionPolicy = widget.existing?.retentionPolicy;
   late bool _isActive = widget.existing?.isActive ?? true;
+  // null = inherit from parent (approvals hand-off §2).
+  late String? _approvalMode = widget.existing?.approvalMode;
   bool _busy = false;
   bool _changed = false;
 
@@ -98,6 +100,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
       'parent': _parentSlug,
       'retention_policy': _retentionPolicy,
       'is_active': _isActive,
+      'approval_mode': _approvalMode,
     };
     setState(() => _busy = true);
     try {
@@ -233,6 +236,13 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
     });
   }
 
+  static String _modeLabel(String mode) => switch (mode) {
+        'none' => 'None (versions active immediately)',
+        'required' => 'Release required',
+        'four_eyes' => 'Four eyes (uploader may not release)',
+        _ => mode,
+      };
+
   @override
   Widget build(BuildContext context) {
     final types = ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
@@ -352,6 +362,34 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     onChanged: _busy
                         ? null
                         : (v) => setState(() => _retentionPolicy = v),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: _approvalMode,
+                    decoration: InputDecoration(
+                      labelText: 'Version approval',
+                      // The server has no effective-mode endpoint — resolve
+                      // the inherited value by walking the parent chain
+                      // (approvals hand-off §2).
+                      helperText: _approvalMode == null
+                          ? 'Inherited: '
+                              '${_modeLabel(effectiveApprovalMode({
+                                for (final t in types) t.slug: t,
+                              }, _parentSlug))}'
+                          : 'New uploads of this subtree '
+                              '${_approvalMode == 'none' ? 'become active immediately' : 'await release first'}',
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                          value: null, child: Text('— inherit —')),
+                      for (final m in const ['none', 'required', 'four_eyes'])
+                        DropdownMenuItem<String?>(
+                            value: m, child: Text(_modeLabel(m))),
+                    ],
+                    onChanged: _busy
+                        ? null
+                        : (v) => setState(() => _approvalMode = v),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,

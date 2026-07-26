@@ -6,8 +6,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_filex/open_filex.dart';
+import '../util/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
@@ -38,6 +39,10 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   Object? _error;
   Timer? _pollTimer;
   bool _busy = false;
+  // Versions whose release hit the four-eyes 403 (`approval_required`): the
+  // button stays visible but disabled with a hint — unlike a plain 403,
+  // which drops release_version for the whole type (hand-off §4).
+  final Set<int> _fourEyesBlocked = {};
 
   @override
   void initState() {
@@ -204,8 +209,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       final file = File('${dir.path}/dms/${doc.uuid}/v${v.number}/$safeName');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
-      final result = await OpenFilex.open(file.path);
-      if (mounted && result.type != ResultType.done) {
+      final opened = await openExternally(file.path);
+      if (mounted && !opened) {
         showSnack(context, 'Saved to ${file.path}');
       }
     } on ApiException catch (e) {
@@ -271,10 +276,19 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     if (picked == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref
+      // Whether the version needs a release is the server's call — read it
+      // off the response, never compute it client-side (hand-off §3).
+      final v = await ref
           .read(apiProvider)
           .uploadVersion(_doc!.uuid, picked, force: force);
-      if (mounted) showSnack(context, 'New version uploaded.');
+      if (mounted) {
+        showSnack(
+          context,
+          v.isPending
+              ? 'Version ${v.number} uploaded — awaiting release.'
+              : 'New version uploaded.',
+        );
+      }
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -404,6 +418,33 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       await _load();
     } on ApiException catch (e) {
       if (mounted) showSnack(context, e.detail);
+    }
+  }
+
+  /// Release a pending version (approvals hand-off §4).
+  Future<void> _releaseVersion(DocumentVersion v) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiProvider).releaseVersion(_doc!.uuid, v.number);
+      if (mounted) showSnack(context, 'Version ${v.number} released.');
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 400) {
+        // "not pending release" — someone was faster; just catch up (§7).
+        await _load();
+      } else if (e.isApprovalRequired) {
+        setState(() => _fourEyesBlocked.add(v.number));
+        showSnack(
+          context,
+          'Four-eyes approval: another user must release your own upload.',
+        );
+      } else {
+        if (e.isForbidden) _recordDenied('release_version');
+        showSnack(context, e.detail);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -620,13 +661,25 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   Future<void> _replaceFile(DocumentVersion v) async {
     final picked = await _pickMultipart();
     if (picked == null || !mounted) return;
+    // §7 "replace resets release": warn when approvals plausibly apply. The
+    // effective mode is resolved client-side and only feeds this warning —
+    // the response's approval_status is what we act on.
+    final approvalGated = effectiveApprovalMode(
+          ref.read(documentTypesBySlugProvider),
+          _doc!.documentType,
+        ) !=
+        'none';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Replace file of version ${v.number}?'),
-        content: const Text(
+        content: Text(
           'The stored bytes will be overwritten in place. To keep history, '
-          'upload a new version instead.',
+          'upload a new version instead.'
+          '${approvalGated && !v.isPending ? '\n\nThis type requires release '
+              'approval: the replaced version drops back to "awaiting '
+              'release", and the document reverts to the previous released '
+              'content until it is released again.' : ''}',
         ),
         actions: [
           TextButton(
@@ -643,10 +696,18 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref
+      final replaced = await ref
           .read(apiProvider)
           .replaceVersionFile(_doc!.uuid, v.number, picked);
-      if (mounted) showSnack(context, 'File replaced.');
+      if (mounted) {
+        showSnack(
+          context,
+          replaced.isPending
+              ? 'File replaced — version ${replaced.number} awaits release; '
+                  'the document shows the previous released content until then.'
+              : 'File replaced.',
+        );
+      }
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -685,6 +746,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final denied = ref.watch(deniedActionsProvider.notifier);
     final canEdit = !denied.isDenied(doc.documentType, 'edit_metadata');
     final canUpload = !denied.isDenied(doc.documentType, 'upload_version');
+    // Optimistic like the rest of §5: shown until a plain 403 denies it.
+    final canRelease = !denied.isDenied(doc.documentType, 'release_version');
+    final pending = doc.latestPendingVersion;
     // No "may I comment?" flag exists — show the composer optimistically and
     // drop it for this type after a 403 (hand-off §5).
     final canComment = !denied.isDenied(doc.documentType, 'comment');
@@ -698,10 +762,22 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           _EditSessionBanner(
             session: editSession,
             canUpload: canUpload,
+            approvalGated:
+                effectiveApprovalMode(bySlug, doc.documentType) != 'none',
             onUploadNewVersion: _editUploadNewVersion,
             onReplaceFile: _editReplaceFile,
             onStop: () =>
                 ref.read(editSessionsProvider.notifier).stop(doc.uuid),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (pending != null) ...[
+          _PendingReleaseBanner(
+            version: pending,
+            canRelease: canRelease,
+            fourEyesBlocked: _fourEyesBlocked.contains(pending.number),
+            noReleasedContent: current == null,
+            onRelease: _busy ? null : () => _releaseVersion(pending),
           ),
           const SizedBox(height: 12),
         ],
@@ -723,6 +799,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           onHide: (_busy || !canUpload) ? null : _hideVersion,
           onUnhide: (_busy || !canUpload) ? null : _unhideVersion,
           onReExtract: (_busy || !canUpload) ? null : _reExtract,
+          onRelease: (_busy || !canRelease) ? null : _releaseVersion,
+          fourEyesBlocked: _fourEyesBlocked,
         ),
         const SizedBox(height: 12),
         _CommentsCard(
@@ -760,13 +838,26 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       ],
     );
 
-    final preview = current != null
-        ? _PreviewPager(
+    // PDFs (and odt/docx via server-side conversion) render in-app with a
+    // real text layer; everything else uses the server preview images.
+    // Preview the released content; if none exists (only-released version
+    // replaced, §7), fall back to the pending proposal — its per-version
+    // preview is open to anyone with `view` (§5).
+    final previewVersion = current ?? pending;
+    final preview = previewVersion == null
+        ? const SizedBox.shrink()
+        : (isPdfMime(previewVersion.mimeType) ||
+                canDownloadAsPdf(previewVersion.mimeType))
+        ? _PdfPreview(
             api: ref.read(apiProvider),
             uuid: doc.uuid,
-            version: current,
+            version: previewVersion,
           )
-        : const SizedBox.shrink();
+        : _PreviewPager(
+            api: ref.read(apiProvider),
+            uuid: doc.uuid,
+            version: previewVersion,
+          );
 
     return Scaffold(
       appBar: AppBar(
@@ -874,7 +965,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  if (current != null) SizedBox(height: 420, child: preview),
+                  if (previewVersion != null)
+                    SizedBox(height: 420, child: preview),
                   const SizedBox(height: 12),
                   infoColumn,
                 ],
@@ -1414,6 +1506,8 @@ class _MentionFieldState extends State<_MentionField> {
 class _EditSessionBanner extends StatelessWidget {
   final EditSession session;
   final bool canUpload;
+  // Approvals may apply to this type (client-side resolved, warning only).
+  final bool approvalGated;
   final VoidCallback onUploadNewVersion;
   final VoidCallback onReplaceFile;
   final VoidCallback onStop;
@@ -1421,6 +1515,7 @@ class _EditSessionBanner extends StatelessWidget {
   const _EditSessionBanner({
     required this.session,
     required this.canUpload,
+    required this.approvalGated,
     required this.onUploadNewVersion,
     required this.onReplaceFile,
     required this.onStop,
@@ -1478,12 +1573,16 @@ class _EditSessionBanner extends StatelessWidget {
             if (changed) ...[
               const SizedBox(height: 8),
               Text(
-                session.compliance
-                    ? 'This document is under retention: the change can only '
-                          'be uploaded as version ${session.versionNumber + 1}.'
-                    : 'Upload the change as version '
-                          '${session.versionNumber + 1}, or overwrite the file '
-                          'of version ${session.versionNumber} in place.',
+                (session.compliance
+                        ? 'This document is under retention: the change can only '
+                              'be uploaded as version ${session.versionNumber + 1}.'
+                        : 'Upload the change as version '
+                              '${session.versionNumber + 1}, or overwrite the file '
+                              'of version ${session.versionNumber} in place.') +
+                    (approvalGated
+                        ? ' This type requires release approval — the result '
+                              'awaits release before it becomes the document.'
+                        : ''),
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 10),
@@ -1512,6 +1611,93 @@ class _EditSessionBanner extends StatelessWidget {
   }
 }
 
+/// Slim banner while a version awaits release (approvals hand-off §9):
+/// reviewers see it without scrolling; the timeline below holds the
+/// proposed diff. Release is optimistic — a plain 403 hides the button for
+/// the type, the four-eyes 403 disables it with a hint.
+class _PendingReleaseBanner extends StatelessWidget {
+  final DocumentVersion version;
+  final bool canRelease;
+  final bool fourEyesBlocked;
+  final bool noReleasedContent;
+  final VoidCallback? onRelease;
+
+  const _PendingReleaseBanner({
+    required this.version,
+    required this.canRelease,
+    required this.fourEyesBlocked,
+    required this.noReleasedContent,
+    required this.onRelease,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      color: dark
+          ? Colors.amber.shade900.withValues(alpha: .25)
+          : Colors.amber.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.pending_actions,
+                    size: 18,
+                    color: dark ? Colors.amber.shade200 : Colors.amber.shade900),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Version ${version.number} awaiting release — uploaded by '
+                    '${version.uploadedBy} · ${formatDateTime(version.uploadedAt)}',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              noReleasedContent
+                  ? 'No released version exists right now — the document has '
+                      'no effective content until this version is released.'
+                  : 'The document still shows the previous released content. '
+                      'Review the proposed changes in the timeline below.',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (canRelease) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: fourEyesBlocked ? null : onRelease,
+                    icon: const Icon(Icons.task_alt, size: 18),
+                    label: Text('Release v${version.number}'),
+                  ),
+                  if (fourEyesBlocked)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Text(
+                        'Four-eyes: another user must release this.',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _VersionsCard extends StatelessWidget {
   final Document doc;
   final void Function(DocumentVersion)? onDownload;
@@ -1522,6 +1708,8 @@ class _VersionsCard extends StatelessWidget {
   final void Function(DocumentVersion)? onHide;
   final void Function(DocumentVersion)? onUnhide;
   final void Function(DocumentVersion)? onReExtract;
+  final void Function(DocumentVersion)? onRelease;
+  final Set<int> fourEyesBlocked;
 
   const _VersionsCard({
     required this.doc,
@@ -1533,6 +1721,8 @@ class _VersionsCard extends StatelessWidget {
     required this.onHide,
     required this.onUnhide,
     required this.onReExtract,
+    required this.onRelease,
+    required this.fourEyesBlocked,
   });
 
   @override
@@ -1573,16 +1763,28 @@ class _VersionsCard extends StatelessWidget {
                       ? theme.colorScheme.outline
                       : theme.colorScheme.primary,
                 ),
-                title: Text(
-                  'v${v.number} · ${v.originalFilename}',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    decoration: v.isHidden ? TextDecoration.lineThrough : null,
-                    color: v.isHidden ? theme.colorScheme.outline : null,
-                    fontWeight: v.number == currentNumber
-                        ? FontWeight.w600
-                        : null,
-                  ),
+                title: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'v${v.number} · ${v.originalFilename}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          decoration:
+                              v.isHidden ? TextDecoration.lineThrough : null,
+                          color: v.isHidden ? theme.colorScheme.outline : null,
+                          fontWeight: v.number == currentNumber
+                              ? FontWeight.w600
+                              : null,
+                        ),
+                      ),
+                    ),
+                    if (!v.isHidden && v.isPending)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: PendingReleaseBadge(),
+                      ),
+                  ],
                 ),
                 subtitle: Text(
                   v.isHidden
@@ -1590,12 +1792,25 @@ class _VersionsCard extends StatelessWidget {
                             '${(v.hiddenReason?.isNotEmpty ?? false) ? ': ${v.hiddenReason}' : ''}'
                       : '${formatBytes(v.size)} · ${v.uploadedBy}'
                             ' · ${formatDateTime(v.uploadedAt)}'
+                            // Explicit releases only — auto-released versions
+                            // carry no released_by (§5).
+                            '${v.releasedBy != null ? ' · released by ${v.releasedBy}' : ''}'
                             '${v.extractionStatus == ExtractionStatus.failed ? ' · OCR failed' : ''}',
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (!v.isHidden && v.isPending && onRelease != null)
+                      IconButton(
+                        tooltip: fourEyesBlocked.contains(v.number)
+                            ? 'Four-eyes: another user must release this'
+                            : 'Release this version',
+                        icon: const Icon(Icons.task_alt, size: 20),
+                        onPressed: fourEyesBlocked.contains(v.number)
+                            ? null
+                            : () => onRelease!(v),
+                      ),
                     if (!v.isHidden) ...[
                       if (onOpenEdit != null)
                         IconButton(
@@ -1691,6 +1906,98 @@ class _VersionsCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// In-app pdfium viewer (pdfrx) with a real text layer: select, copy,
+/// zoom. Native PDFs load their original bytes; odt/docx go through the
+/// server's on-the-fly PDF conversion. If the fetch fails we fall back to
+/// the server-rendered preview images.
+class _PdfPreview extends StatefulWidget {
+  final ApiClient api;
+  final String uuid;
+  final DocumentVersion version;
+
+  const _PdfPreview({
+    required this.api,
+    required this.uuid,
+    required this.version,
+  });
+
+  @override
+  State<_PdfPreview> createState() => _PdfPreviewState();
+}
+
+class _PdfPreviewState extends State<_PdfPreview> {
+  final _controller = PdfViewerController();
+  Uint8List? _bytes;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_PdfPreview old) {
+    super.didUpdateWidget(old);
+    if (old.uuid != widget.uuid || old.version.number != widget.version.number) {
+      setState(() {
+        _bytes = null;
+        _failed = false;
+      });
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final v = widget.version;
+    try {
+      final bytes = isPdfMime(v.mimeType)
+          ? await widget.api.downloadVersion(widget.uuid, v.number)
+          : await widget.api.downloadVersionPdf(widget.uuid, v.number);
+      if (!mounted) return;
+      setState(() => _bytes = bytes);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) {
+      return _PreviewPager(
+        api: widget.api,
+        uuid: widget.uuid,
+        version: widget.version,
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: _bytes == null
+          ? const Center(child: CircularProgressIndicator())
+          : PdfViewer.data(
+              _bytes!,
+              sourceName: '${widget.uuid}/v${widget.version.number}',
+              controller: _controller,
+              params: PdfViewerParams(
+                backgroundColor: scheme.surfaceContainerHighest,
+                // pdfrx defaults to 0.2 (a fifth of the normal Flutter
+                // scroll delta) — far too sluggish on desktop.
+                scrollByMouseWheel: 1.0,
+                viewerOverlayBuilder: (context, size, handleLinkTap) => [
+                  PdfViewerScrollThumb(controller: _controller),
+                ],
+              ),
+            ),
     );
   }
 }

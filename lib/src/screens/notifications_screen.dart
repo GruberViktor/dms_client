@@ -242,6 +242,7 @@ class _NotificationTile extends StatelessWidget {
     'version_replace_file': 'replaced a file in',
     'version_hide': 'hid a version of',
     'version_unhide': 'unhid a version of',
+    'version_release': 'released a version of',
     'archive': 'archived',
     'unarchive': 'unarchived',
     'type_change': 'changed the type of',

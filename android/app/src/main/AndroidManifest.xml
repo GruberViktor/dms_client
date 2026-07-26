@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="dms_client"
+        android:label="LUVI Docs"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

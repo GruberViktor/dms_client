@@ -1,5 +1,5 @@
 name: dms_client
-description: "A new Flutter project."
+description: "LUVI Docs — Flutter client for the company DMS server."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -49,6 +49,7 @@ dependencies:
   crypto: ^3.0.7
   desktop_drop: ^0.7.1
   calendar_date_picker2: ^3.0.0
+  pdfrx: ^2.4.7
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +61,25 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# Launcher icons: assets/icon/logo.png is the master (white line art on
+# transparency); icon.png is it flattened on #242424 and icon_foreground.png is
+# the Android adaptive layer. `flutter pub run flutter_launcher_icons`
+# regenerates the Android mipmaps + adaptive icons and
+# windows/runner/resources/app_icon.ico from the sources below. Linux has no
+# generator support — its window icon is the bundled asset
+# assets/icon/icon.png, loaded by linux/runner/my_application.cc.
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  adaptive_icon_background: "#242424"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/icon_foreground.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    icon_size: 256
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -71,6 +91,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/icon/icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

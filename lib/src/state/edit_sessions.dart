@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_filex/open_filex.dart';
+import '../util/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:watcher/watcher.dart';
 
@@ -106,7 +106,7 @@ class EditSessionsNotifier extends Notifier<Map<String, EditSession>> {
     };
     _subs[doc.uuid] =
         FileWatcher(file.path).events.listen((e) => _onEvent(doc.uuid));
-    await OpenFilex.open(file.path);
+    await openExternally(file.path);
   }
 
   void stop(String uuid) {

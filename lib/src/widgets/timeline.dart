@@ -122,8 +122,10 @@ class _TimelineRow extends StatelessWidget {
                   ? _VersionCard(event: e)
                   : isComment
                       ? _CommentBubble(event: e)
-                      : _AuditLine(
-                          event: e as AuditEvent, repeat: entry.repeat),
+                      : e is ReplaceDiffEvent
+                          ? _ReplaceDiffLine(event: e)
+                          : _AuditLine(
+                              event: e as AuditEvent, repeat: entry.repeat),
             ),
           ),
         ],
@@ -146,6 +148,7 @@ class _AuditLine extends StatelessWidget {
     'version_replace_file': 'replaced a version file',
     'version_hide': 'hid a version',
     'version_unhide': 'unhid a version',
+    'version_release': 'released a version',
     'download': 'downloaded',
     'view': 'viewed',
     'archive': 'archived the document',
@@ -167,6 +170,17 @@ class _AuditLine extends StatelessWidget {
     var label = _labels[event.action] ?? event.action;
     if (repeat > 1) {
       label = event.action == 'view' ? 'viewed $repeat×' : 'downloaded $repeat×';
+    }
+    if (event.action == 'version_release' &&
+        event.context?['version'] != null) {
+      label = 'released v${event.context!['version']}';
+    }
+    // Approvals hand-off §6: the upload/replace awaits release — say so.
+    if (event.context?['pending_approval'] == true) {
+      if (event.action == 'version_upload') label = 'proposed a new version';
+      if (event.action == 'version_replace_file') {
+        label = 'replaced a version file (awaiting release)';
+      }
     }
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
@@ -204,6 +218,39 @@ class _AuditLine extends StatelessWidget {
             child: Text('${event.context!['error']}',
                 style: muted?.copyWith(color: scheme.error)),
           ),
+      ],
+    );
+  }
+}
+
+/// A replace_diff event: the in-place file replacement's content changes,
+/// styled like an audit line (no actor — computed by the server after
+/// re-extraction) with the usual collapsed diff chips below.
+class _ReplaceDiffLine extends StatelessWidget {
+  final ReplaceDiffEvent event;
+
+  const _ReplaceDiffLine({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Version ${event.version} content changed by file replacement',
+          style: theme.textTheme.bodyMedium,
+        ),
+        Text(
+          formatDateTime(event.timestamp),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: _DiffSection(diff: event.diff),
+        ),
       ],
     );
   }
@@ -380,6 +427,11 @@ class _VersionCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (!hidden && event.isPending)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: PendingReleaseBadge(),
+                  ),
                 if (event.extractionStatus == ExtractionStatus.pending ||
                     event.extractionStatus == ExtractionStatus.running)
                   const Padding(
@@ -399,6 +451,15 @@ class _VersionCard extends StatelessWidget {
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
             ),
+            // Only explicit releases carry released_by; auto-released
+            // versions stay unannotated (approvals hand-off §5).
+            if (!hidden && event.releasedBy != null)
+              Text(
+                'Released by ${event.releasedBy}'
+                '${event.releasedAt != null ? ' · ${formatDateTime(event.releasedAt!)}' : ''}',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
             if (hidden)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -417,6 +478,28 @@ class _VersionCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: _DiffSection(diff: event.diff!),
               ),
+            // Review surface for pending versions (approvals hand-off §6):
+            // live diff against the current released content. Null until
+            // extraction is done; after release the chain diff replaces it.
+            if (!hidden && event.isPending && event.proposedDiff != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'What changes if released'
+                      '${event.proposedDiff!.fromVersion == null ? ' (no released baseline)' : ''}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    _DiffSection(diff: event.proposedDiff!),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -428,6 +511,33 @@ class _VersionCard extends StatelessWidget {
           'Hidden${event.hiddenBy != null ? ' by ${event.hiddenBy}' : ''}'
           '${(event.hiddenReason?.isNotEmpty ?? false) ? ' — ${event.hiddenReason}' : ''}',
       child: card,
+    );
+  }
+}
+
+/// Amber "awaiting release" chip for pending versions (approvals hand-off
+/// §9) — shared by the timeline version card and the detail versions card.
+class PendingReleaseBadge extends StatelessWidget {
+  const PendingReleaseBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.amber.shade900.withValues(alpha: .5)
+            : Colors.amber.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'awaiting release',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: dark ? Colors.amber.shade200 : Colors.amber.shade900,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
     );
   }
 }
@@ -453,7 +563,7 @@ class _DiffSectionState extends State<_DiffSection> {
 
     if (d.tooLarge) {
       return Text(
-        'diff not available (file too large)',
+        'diff too large — review the file directly',
         style: theme.textTheme.bodySmall
             ?.copyWith(color: scheme.onSurfaceVariant),
       );

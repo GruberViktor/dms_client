@@ -14,6 +14,19 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Sets the window/taskbar icon from the bundled Flutter asset. Linux has no
+// launcher-icon generator (see the flutter_launcher_icons block in
+// pubspec.yaml), so the app icon ships as a regular asset.
+static void set_window_icon(GtkWindow* window, FlDartProject* project) {
+  g_autofree gchar* icon_path = g_build_filename(
+      fl_dart_project_get_assets_path(project), "assets/icon/icon.png",
+      nullptr);
+  g_autoptr(GError) error = nullptr;
+  if (!gtk_window_set_icon_from_file(window, icon_path, &error)) {
+    g_warning("Failed to load app icon %s: %s", icon_path, error->message);
+  }
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -45,11 +58,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "dms_client");
+    gtk_header_bar_set_title(header_bar, "LUVI Docs");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "dms_client");
+    gtk_window_set_title(window, "LUVI Docs");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
@@ -57,6 +70,8 @@ static void my_application_activate(GApplication* application) {
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
+
+  set_window_icon(window, project);
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;

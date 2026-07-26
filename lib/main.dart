@@ -23,7 +23,7 @@ class DmsApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     return MaterialApp(
-      title: 'DMS',
+      title: 'LUVI Docs',
       navigatorKey: _rootNavigatorKey,
       // Route mouse back/forward side-buttons to navigation.
       builder: (context, child) => Listener(

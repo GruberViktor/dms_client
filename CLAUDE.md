@@ -34,7 +34,8 @@ token) in flutter_secure_storage.
   Active/All/Archived, date range, metadata filters, infinite scroll —
   a non-empty query feeds the same card grid from `/search/` instead, and
   hides the date/metadata chips that endpoint cannot apply; headlines are
-  discarded), document detail (preview pager, metadata card, versions, comments
+  discarded), document detail (in-app PDF viewer with server-image pager
+  fallback, metadata card, versions, comments
   card — affordances driven by server-resolved `can_edit`/`can_delete`, composer
   shown optimistically and dropped per type on 403 — timeline, download & open,
   archive, extraction polling), index browser (drill nodes → leaf document
@@ -45,18 +46,27 @@ token) in flutter_secure_storage.
   cards, grouped view/download events, collapsed ±N diff chips, hidden
   versions struck through, comment nodes (soft-deleted ones stay, struck
   through with "removed by" hint; `comment_*` audit rows are suppressed as
-  duplicates of the nodes).
+  duplicates of the nodes), `replace_diff` events (what an in-place file
+  replacement changed, timestamped at re-extraction, no actor) reusing the
+  same diff chips.
 
 ## Conventions
 
 - Monetary metadata values are decimal **strings** on the wire — never parse
   to double (use `decimal` when arithmetic is needed).
 - Multipart uploads: `metadata` must be a JSON-encoded *string* form field.
-- Previews come from the server (`/preview/?size=thumb|preview&page=N`),
-  fetched with the token header; 404 → mime-type icon fallback. No on-device
-  PDF rendering.
+- Detail-screen preview: PDFs (and odt/docx via `…/download/pdf`) render
+  in-app with pdfrx/pdfium — real text layer, select/copy. Other formats,
+  and PDF fetch failures, use the server preview images
+  (`/preview/?size=thumb|preview&page=N`, token header); 404 → mime-type
+  icon fallback. List thumbnails always use the server previews.
 - Compliance mode: hide delete/replace-file actions, show the lock badge;
   archive stays available.
+- Branding: display name "LUVI Docs" (Android label, GTK/Win32 window title,
+  Windows version resource, `MaterialApp.title`); the package/binary stays
+  `dms_client`. Icons come from `assets/icon/` via `flutter pub run
+  flutter_launcher_icons` (see the pubspec block) — Linux is wired by hand in
+  `linux/runner/my_application.cc`.
 
 ## Status
 
@@ -80,6 +90,20 @@ odt/docx versions can be fetched as PDF (`…/versions/{n}/download/pdf`) via
 the pdf icon on list cards, the detail top bar, and version rows. Note the
 spec prose calling `mime_type` detail-only is outdated: the server now sends
 it on document list and search rows too (null when all versions are hidden).
+
+Version approvals hand-off implemented: types can require release of new
+versions (`approval_mode`: none/required/four_eyes, null = inherit — admin
+editor resolves the effective mode client-side by walking `parent_slug`).
+`Document.currentVersion` now means newest visible *released* version (the
+server keeps content/preview/mime_type there while a proposal is pending);
+detail screen shows an amber "awaiting release" banner + per-version badges,
+optimistic release buttons (`release_version` atom; plain 403 → §5 deny,
+403 `approval_required` → four-eyes, button disabled with hint, tracked in
+`_fourEyesBlocked`), the timeline renders the live `proposed_diff` ("what
+changes if released") on pending version nodes and `version_release` audit
+rows, and replace-file warns that it resets a released version to pending
+(§7). Reject = the existing hide flow. No pending-approvals queue exists
+server-side (§10).
 
 ACL editor caveat: PUT acls body is `[{"group": <pk>, "permissions": [...]}]`
 and there is no group listing API (spec §10) — groups are entered as raw ids.

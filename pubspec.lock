@@ -81,6 +81,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  checked_yaml:
+    dependency: transitive
+    description:
+      name: checked_yaml
+      sha256: "959525d3162f249993882720d52b7e0c833978df229be20702b33d48d91de70f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.4"
   cli_config:
     dependency: transitive
     description:
@@ -89,6 +97,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0"
+  cli_util:
+    dependency: transitive
+    description:
+      name: cli_util
+      sha256: ff6785f7e9e3c38ac98b2fb035701789de90154024a75b6cb926445e83197d1c
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.2"
   clock:
     dependency: transitive
     description:
@@ -270,6 +286,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_launcher_icons:
+    dependency: "direct dev"
+    description:
+      name: flutter_launcher_icons
+      sha256: "10f13781741a2e3972126fae08393d3c4e01fa4cd7473326b94b72cf594195e7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.14.4"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -504,6 +528,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.1"
+  json_annotation:
+    dependency: transitive
+    description:
+      name: json_annotation
+      sha256: "2a743920d81b7910627f68ee2c9ac1fc0bfee32b9fc3403587d7c6791ca12f80"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.12.0"
   leak_tracker:
     dependency: transitive
     description:
@@ -680,6 +712,38 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.13.0"
+  pdfium_dart:
+    dependency: transitive
+    description:
+      name: pdfium_dart
+      sha256: "86e95c66b09f3245b95c4924f2edce8d4f7c9786876e5c5ee8e36b104a94bbb0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.5"
+  pdfium_flutter:
+    dependency: transitive
+    description:
+      name: pdfium_flutter
+      sha256: "0b115c0917aef9cf6bb9c4d47d0efc61d97f44844cd76287c921f997c26cf15d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.3"
+  pdfrx:
+    dependency: "direct main"
+    description:
+      name: pdfrx
+      sha256: acce61944c31bd36f0c3031b1bbf41f59d0b0d4e5e27614fbdc74ff093d55464
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.7"
+  pdfrx_engine:
+    dependency: transitive
+    description:
+      name: pdfrx_engine
+      sha256: ef8f8cfa64255bfc91a559dd2d32d7cfe7a0f8003bac297bbf9a0aed1182fae5
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.6"
   petitparser:
     dependency: transitive
     description:
@@ -760,6 +824,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.3.2"
+  rxdart:
+    dependency: transitive
+    description:
+      name: rxdart
+      sha256: "5c3004a4a8dbb94bd4bf5412a4def4acdaa12e12f269737a5751369e12d1a962"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.28.0"
   shelf:
     dependency: transitive
     description:
@@ -853,6 +925,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  synchronized:
+    dependency: transitive
+    description:
+      name: synchronized
+      sha256: "61894a1956de6b4fc1aefd0892e109514a1a706cbece3ac59decd90ff5a7a423"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.4.1+1"
   term_glyph:
     dependency: transitive
     description:

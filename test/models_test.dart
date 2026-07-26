@@ -185,6 +185,150 @@ void main() {
     expect((a as AuditEvent).actor, isNull);
   });
 
+  group('version approvals (approvals hand-off)', () {
+    Map<String, dynamic> versionJson(int n,
+            {String? approval, String? releasedBy, bool hidden = false}) =>
+        {
+          'number': n,
+          'original_filename': 'f$n.pdf',
+          'mime_type': 'application/pdf',
+          'size': 10,
+          'checksum_sha256': 'c$n',
+          'uploaded_by': 'alice',
+          'uploaded_at': '2026-07-2${n}T10:00:00Z',
+          'extraction_status': 'done',
+          'is_hidden': hidden,
+          'approval_status': ?approval,
+          'released_by': ?releasedBy,
+          if (releasedBy != null) 'released_at': '2026-07-25T12:00:00Z',
+        };
+
+    test('DocumentVersion parses approval fields; absent = auto-released', () {
+      final legacy = DocumentVersion.fromJson(versionJson(1));
+      expect(legacy.approvalStatus, 'released');
+      expect(legacy.isPending, false);
+      expect(legacy.releasedBy, isNull);
+
+      final pending =
+          DocumentVersion.fromJson(versionJson(2, approval: 'pending'));
+      expect(pending.isPending, true);
+
+      final released = DocumentVersion.fromJson(
+          versionJson(2, approval: 'released', releasedBy: 'bob'));
+      expect(released.isPending, false);
+      expect(released.releasedBy, 'bob');
+      expect(released.releasedAt, isNotNull);
+    });
+
+    test('currentVersion skips pending; latestPendingVersion finds it', () {
+      final doc = Document.fromJson({
+        'uuid': 'u1',
+        'title': 'T',
+        'document_type': 'invoice',
+        'date_added': '2026-07-20T10:00:00Z',
+        'added_by': 'alice',
+        'archived': false,
+        'versions': [
+          versionJson(1, approval: 'released'),
+          versionJson(2, approval: 'pending'),
+        ],
+      });
+      // The pending v2 is a proposal — v1 stays "the document" (§1/§5).
+      expect(doc.currentVersion?.number, 1);
+      expect(doc.latestPendingVersion?.number, 2);
+    });
+
+    test('all versions pending → no current version (§7 replace reset)', () {
+      final doc = Document.fromJson({
+        'uuid': 'u1',
+        'title': 'T',
+        'document_type': 'invoice',
+        'date_added': '2026-07-20T10:00:00Z',
+        'added_by': 'alice',
+        'archived': false,
+        'versions': [versionJson(1, approval: 'pending')],
+      });
+      expect(doc.currentVersion, isNull);
+      expect(doc.latestPendingVersion?.number, 1);
+    });
+
+    test('VersionEvent parses approval fields and proposed_diff', () {
+      final e = TimelineEvent.fromJson({
+        'kind': 'version',
+        'timestamp': '2026-07-25T10:00:00Z',
+        'number': 2,
+        'original_filename': 'b.pdf',
+        'mime_type': 'application/pdf',
+        'size': 10,
+        'uploaded_by': 'bob',
+        'extraction_status': 'done',
+        'is_hidden': false,
+        'approval_status': 'pending',
+        'released_by': null,
+        'released_at': null,
+        'diff': null,
+        'proposed_diff': {
+          'from_version': 1,
+          'added_lines': 3,
+          'removed_lines': 1,
+          'too_large': false,
+          'unified_diff': '--- v1\n+++ v2 (proposed)\n@@ -1 +1 @@\n-a\n+b',
+        },
+      }) as VersionEvent;
+      expect(e.isPending, true);
+      expect(e.diff, isNull);
+      expect(e.proposedDiff?.fromVersion, 1);
+      expect(e.proposedDiff?.addedLines, 3);
+    });
+
+    test('effectiveApprovalMode walks parent chain, root default none', () {
+      DocumentType type(String slug, String? parent, String? mode) =>
+          DocumentType(
+            slug: slug,
+            name: slug,
+            parentSlug: parent,
+            depth: 0,
+            retentionPolicy: null,
+            isActive: true,
+            approvalMode: mode,
+            metadataFields: const [],
+          );
+      final bySlug = {
+        'root': type('root', null, 'four_eyes'),
+        'mid': type('mid', 'root', null),
+        'leaf': type('leaf', 'mid', null),
+        'override': type('override', 'root', 'none'),
+        'loop': type('loop', 'loop', null),
+      };
+      expect(effectiveApprovalMode(bySlug, 'leaf'), 'four_eyes');
+      expect(effectiveApprovalMode(bySlug, 'override'), 'none');
+      expect(effectiveApprovalMode(bySlug, 'unknown'), 'none');
+      expect(effectiveApprovalMode(bySlug, null), 'none');
+      expect(effectiveApprovalMode(bySlug, 'loop'), 'none');
+    });
+  });
+
+  test('TimelineEvent parses replace_diff kind', () {
+    final e = TimelineEvent.fromJson({
+      'kind': 'replace_diff',
+      'timestamp': '2026-07-25T08:30:00Z',
+      'version': 3,
+      'diff': {
+        'added_lines': 5,
+        'removed_lines': 1,
+        'too_large': false,
+        'unified_diff': '@@ -1 +1 @@\n-alt\n+neu',
+      },
+    });
+    expect(e, isA<ReplaceDiffEvent>());
+    final r = e as ReplaceDiffEvent;
+    expect(r.version, 3);
+    expect(r.diff.addedLines, 5);
+    expect(r.diff.removedLines, 1);
+    expect(r.diff.tooLarge, false);
+    expect(r.diff.unifiedDiff, contains('+neu'));
+  });
+
   test('SearchHit parses mime_type (null when all versions hidden)', () {
     final hit = SearchHit.fromJson({
       'uuid': 'u1',

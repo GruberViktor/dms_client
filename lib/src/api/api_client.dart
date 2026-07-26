@@ -22,6 +22,11 @@ class ApiException implements Exception {
   bool get isComplianceLocked => code == 'compliance_locked';
   bool get isDuplicateFile => code == 'duplicate_file';
   bool get isInvalidMetadata => code == 'invalid_metadata';
+
+  /// Four-eyes 403 on release: this *user* may release, just not this
+  /// particular version (own upload). A plain 403 means no release_version
+  /// permission at all — distinguish by this flag (approvals hand-off §4).
+  bool get isApprovalRequired => code == 'approval_required';
   bool get isUnauthorized => statusCode == 401;
   bool get isForbidden => statusCode == 403;
 
@@ -314,6 +319,15 @@ class ApiClient {
   Future<DocumentVersion> unhideVersion(String uuid, int number) async {
     final res =
         await _request('POST', '/documents/$uuid/versions/$number/unhide');
+    return DocumentVersion.fromJson(_asMap(res.data));
+  }
+
+  /// Release a pending version (approvals hand-off §4). 400 = not pending
+  /// (someone was faster — refetch, no error toast); 403 with
+  /// `approval_required` = four-eyes self-release block.
+  Future<DocumentVersion> releaseVersion(String uuid, int number) async {
+    final res =
+        await _request('POST', '/documents/$uuid/versions/$number/release');
     return DocumentVersion.fromJson(_asMap(res.data));
   }
 

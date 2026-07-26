@@ -42,11 +42,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(sessionProvider.notifier).login(
-            _serverCtrl.text,
-            _userCtrl.text.trim(),
-            _passCtrl.text,
-          );
+      await ref
+          .read(sessionProvider.notifier)
+          .login(_serverCtrl.text, _userCtrl.text.trim(), _passCtrl.text);
     } on ApiException catch (e) {
       setState(() => _error = e.detail);
     } catch (e) {
@@ -70,11 +68,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.folder_shared_outlined,
-                      size: 56, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.folder_shared_outlined,
+                    size: 56,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    'Company DMS',
+                    'LUVI Docs',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
@@ -125,8 +126,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const SizedBox(height: 16),
                     Text(
                       _error!,
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],

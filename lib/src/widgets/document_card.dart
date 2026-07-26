@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
+import '../util/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../api/api_client.dart';
@@ -117,8 +117,8 @@ class _DocumentCardState extends State<DocumentCard> {
       final file = File('${dir.path}/dms/$uuid/v${v.number}/$safeName');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes);
-      final result = await OpenFilex.open(file.path);
-      if (mounted && result.type != ResultType.done) {
+      final opened = await openExternally(file.path);
+      if (mounted && !opened) {
         showSnack(context, 'Saved to ${file.path}');
       }
     } on ApiException catch (e) {

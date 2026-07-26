@@ -24,6 +24,9 @@ String formatBytes(int bytes) {
   return '${v.toStringAsFixed(v >= 10 ? 0 : 1)} ${units[i]}';
 }
 
+/// Substring match: servers may append parameters (e.g. `; charset=binary`).
+bool isPdfMime(String? mime) => (mime ?? '').contains('application/pdf');
+
 /// Formats the server can convert on the fly via
 /// GET /documents/{uuid}/versions/{n}/download/pdf (odt and docx).
 /// Substring match: servers may append parameters (e.g. `; charset=binary`).

@@ -83,6 +83,8 @@ class DocumentType {
   final int depth;
   final int? retentionPolicy;
   final bool isActive;
+  // null = inherit from parent (approvals hand-off §2); root default "none".
+  final String? approvalMode; // none | required | four_eyes | null
   final List<MetadataFieldDef> metadataFields;
 
   DocumentType({
@@ -92,6 +94,7 @@ class DocumentType {
     required this.depth,
     required this.retentionPolicy,
     required this.isActive,
+    this.approvalMode,
     required this.metadataFields,
   });
 
@@ -104,10 +107,27 @@ class DocumentType {
         depth: (json['depth'] as num?)?.toInt() ?? 0,
         retentionPolicy: (json['retention_policy'] as num?)?.toInt(),
         isActive: json['is_active'] != false,
+        approvalMode: json['approval_mode'] as String?,
         metadataFields: ((json['metadata_fields'] as List?) ?? const [])
             .map((e) => MetadataFieldDef.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
+}
+
+/// Effective approval mode for [slug]: nearest non-null `approval_mode`
+/// walking up `parent_slug`; the root default is "none". The server does not
+/// expose this — display/warning use only, never gate behavior on it
+/// (approvals hand-off §2/§3: the server decides, read the response).
+String effectiveApprovalMode(Map<String, DocumentType> bySlug, String? slug) {
+  String? cur = slug;
+  final seen = <String>{};
+  while (cur != null && seen.add(cur)) {
+    final t = bySlug[cur];
+    if (t == null) break;
+    if (t.approvalMode != null) return t.approvalMode!;
+    cur = t.parentSlug;
+  }
+  return 'none';
 }
 
 /// Builds the merged (ancestor-inherited) metadata field set for [slug]:
@@ -168,6 +188,13 @@ class DocumentVersion {
   final DateTime? objectLockUntil;
   final int? pageCount;
   final String? consoleUrl;
+  // Approvals hand-off §5. "released" with releasedBy == null means
+  // auto-released (no approvals, first version, pre-feature uploads).
+  final String approvalStatus; // "pending" | "released"
+  final String? releasedBy;
+  final DateTime? releasedAt;
+
+  bool get isPending => approvalStatus == 'pending';
 
   DocumentVersion({
     required this.number,
@@ -186,6 +213,9 @@ class DocumentVersion {
     required this.objectLockUntil,
     required this.pageCount,
     required this.consoleUrl,
+    this.approvalStatus = 'released',
+    this.releasedBy,
+    this.releasedAt,
   });
 
   factory DocumentVersion.fromJson(Map<String, dynamic> json) =>
@@ -211,6 +241,11 @@ class DocumentVersion {
             : null,
         pageCount: (json['page_count'] as num?)?.toInt(),
         consoleUrl: json['console_url'] as String?,
+        approvalStatus: (json['approval_status'] as String?) ?? 'released',
+        releasedBy: json['released_by'] as String?,
+        releasedAt: json['released_at'] != null
+            ? DateTime.tryParse(json['released_at'] as String)
+            : null,
       );
 }
 
@@ -268,11 +303,24 @@ class Document {
             .toList(),
       );
 
-  /// Newest visible version — "the document".
+  /// Newest visible *released* version — "the document". Pending versions
+  /// are proposals: the server keeps content/preview/mime_type on the last
+  /// released version until release (approvals hand-off §1/§5).
   DocumentVersion? get currentVersion {
     DocumentVersion? best;
     for (final v in versions) {
-      if (v.isHidden) continue;
+      if (v.isHidden || v.isPending) continue;
+      if (best == null || v.number > best.number) best = v;
+    }
+    return best;
+  }
+
+  /// Newest visible pending version, if any — drives the "awaiting release"
+  /// banner on the detail screen.
+  DocumentVersion? get latestPendingVersion {
+    DocumentVersion? best;
+    for (final v in versions) {
+      if (v.isHidden || !v.isPending) continue;
       if (best == null || v.number > best.number) best = v;
     }
     return best;
@@ -373,6 +421,22 @@ sealed class TimelineEvent {
         diff: json['diff'] != null
             ? VersionDiff.fromJson(json['diff'] as Map<String, dynamic>)
             : null,
+        approvalStatus: (json['approval_status'] as String?) ?? 'released',
+        releasedBy: json['released_by'] as String?,
+        releasedAt: json['released_at'] != null
+            ? DateTime.tryParse(json['released_at'] as String)
+            : null,
+        proposedDiff: json['proposed_diff'] != null
+            ? VersionDiff.fromJson(json['proposed_diff'] as Map<String, dynamic>)
+            : null,
+      );
+    }
+    if (json['kind'] == 'replace_diff') {
+      return ReplaceDiffEvent(
+        timestamp: ts,
+        version: (json['version'] as num?)?.toInt() ?? 0,
+        diff: VersionDiff.fromJson(
+            (json['diff'] as Map?)?.cast<String, dynamic>() ?? const {}),
       );
     }
     if (json['kind'] == 'comment') {
@@ -428,6 +492,15 @@ class VersionEvent extends TimelineEvent {
   final String? hiddenBy;
   final String? hiddenReason;
   final VersionDiff? diff;
+  // Approvals hand-off §6. [proposedDiff] is only set on pending, non-hidden
+  // versions with finished extraction: "what changes if released now",
+  // recomputed live against the current released baseline.
+  final String approvalStatus;
+  final String? releasedBy;
+  final DateTime? releasedAt;
+  final VersionDiff? proposedDiff;
+
+  bool get isPending => approvalStatus == 'pending';
 
   VersionEvent({
     required DateTime timestamp,
@@ -440,6 +513,25 @@ class VersionEvent extends TimelineEvent {
     required this.isHidden,
     required this.hiddenBy,
     required this.hiddenReason,
+    required this.diff,
+    this.approvalStatus = 'released',
+    this.releasedBy,
+    this.releasedAt,
+    this.proposedDiff,
+  }) : super(timestamp);
+}
+
+/// A file replacement rewrote a version in place — what the new file changed
+/// vs the old content, as its own timeline node. Timestamped when the
+/// re-extraction finished, so it may trail the `version_replace_file` audit
+/// row; no actor (the diff is computed server-side).
+class ReplaceDiffEvent extends TimelineEvent {
+  final int version;
+  final VersionDiff diff;
+
+  ReplaceDiffEvent({
+    required DateTime timestamp,
+    required this.version,
     required this.diff,
   }) : super(timestamp);
 }
@@ -662,6 +754,7 @@ const aclPermissions = [
   'view',
   'edit_metadata',
   'upload_version',
+  'release_version',
   'delete',
   'archive',
   'download',
