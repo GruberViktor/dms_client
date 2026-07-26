@@ -55,7 +55,12 @@ token) in flutter_secure_storage.
 - Monetary metadata values are decimal **strings** on the wire — never parse
   to double (use `decimal` when arithmetic is needed).
 - Multipart uploads: `metadata` must be a JSON-encoded *string* form field.
-- Detail-screen preview: PDFs (and odt/docx via `…/download/pdf`) render
+- View vs. download are separate server routes with separate audit actions and
+  permissions. Anything rendered *inside* the app fetches
+  `…/versions/{n}/view/pdf` (needs only `view`, logged as a view, seek Ranges
+  deduped server-side); only an explicit Download/open-externally action may
+  call `…/download` or `…/download/pdf` (needs `download`, logged as one).
+- Detail-screen preview: PDFs (and odt/docx via `…/view/pdf`) render
   in-app with pdfrx/pdfium — real text layer, select/copy. Other formats,
   and PDF fetch failures, use the server preview images
   (`/preview/?size=thumb|preview&page=N`, token header); 404 → mime-type

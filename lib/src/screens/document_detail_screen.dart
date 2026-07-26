@@ -1955,12 +1955,18 @@ class _PdfPreviewState extends State<_PdfPreview> {
   Future<void> _load() async {
     final v = widget.version;
     try {
-      final bytes = isPdfMime(v.mimeType)
-          ? await widget.api.downloadVersion(widget.uuid, v.number)
-          : await widget.api.downloadVersionPdf(widget.uuid, v.number);
+      // Rendering in-app is a *view*, never a download: `view/pdf` serves PDF
+      // originals as-is, converts office formats, needs only `view`, and is
+      // audited accordingly. 404 (no rendition) falls back to the pager.
+      final bytes = await widget.api.viewVersionPdf(widget.uuid, v.number);
       if (!mounted) return;
       setState(() => _bytes = bytes);
-    } catch (_) {
+    } catch (e) {
+      // Silent fallback to preview images, but say why in debug builds —
+      // otherwise a broken/renamed route is indistinguishable from
+      // "this format has no PDF rendition".
+      debugPrint('view/pdf failed for ${widget.uuid} v${v.number} '
+          '(${e is ApiException ? 'HTTP ${e.statusCode}' : e.runtimeType}): $e');
       if (!mounted) return;
       setState(() => _failed = true);
     }

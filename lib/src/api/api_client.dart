@@ -287,6 +287,21 @@ class ApiClient {
     return DocumentVersion.fromJson(_asMap(res.data));
   }
 
+  /// In-app rendering only: needs just the `view` permission and is audited
+  /// as a *view*, not a download. PDF originals come back as-is, office
+  /// formats are converted server-side; anything without a PDF rendition
+  /// (and any document the user cannot view) is a 404.
+  Future<Uint8List> viewVersionPdf(String uuid, int number) async {
+    final res = await _request<List<int>>(
+      'GET',
+      '/documents/$uuid/versions/$number/view/pdf',
+      responseType: ResponseType.bytes,
+    );
+    return Uint8List.fromList(res.data!);
+  }
+
+  /// Saving a copy to the user's machine — requires the `download`
+  /// permission and is audited as a download. Never use for previewing.
   Future<Uint8List> downloadVersion(String uuid, int number) async {
     final res = await _request<List<int>>(
       'GET',
@@ -296,7 +311,8 @@ class ApiClient {
     return Uint8List.fromList(res.data!);
   }
 
-  /// Server-side conversion to PDF — only for odt/docx versions.
+  /// Server-side conversion to PDF — only for odt/docx versions. Audited as
+  /// a download; use [viewVersionPdf] for anything shown inside the app.
   Future<Uint8List> downloadVersionPdf(String uuid, int number) async {
     final res = await _request<List<int>>(
       'GET',
