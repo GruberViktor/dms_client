@@ -16,10 +16,12 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 // Sets the window/taskbar icon from the bundled Flutter asset. Linux has no
 // launcher-icon generator (see the flutter_launcher_icons block in
-// pubspec.yaml), so the app icon ships as a regular asset.
+// pubspec.yaml), so the app icon ships as a regular asset. GNOME draws it
+// unmasked, so this is the rounded-corner variant — not the squared-off
+// icon.png that Android and Windows mask themselves.
 static void set_window_icon(GtkWindow* window, FlDartProject* project) {
   g_autofree gchar* icon_path = g_build_filename(
-      fl_dart_project_get_assets_path(project), "assets/icon/icon.png",
+      fl_dart_project_get_assets_path(project), "assets/icon/icon_linux.png",
       nullptr);
   g_autoptr(GError) error = nullptr;
   if (!gtk_window_set_icon_from_file(window, icon_path, &error)) {

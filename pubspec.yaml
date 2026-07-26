@@ -64,13 +64,15 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
 
 # Launcher icons: assets/icon/logo.png is the master (black line art on a white
-# tile, rounded corners); icon.png is it squared off on #ffffff — never ship the
-# master's rounded corners, the platforms round again — and icon_foreground.png
-# is the black art alone, inset to the Android adaptive safe zone.
-# `flutter pub run flutter_launcher_icons` regenerates the Android mipmaps +
-# adaptive icons and windows/runner/resources/app_icon.ico from the sources
-# below. Linux has no generator support — its window icon is the bundled asset
-# assets/icon/icon.png, loaded by linux/runner/my_application.cc.
+# tile, rounded corners). icon.png is it squared off on #ffffff for Android and
+# Windows, which apply their own corner mask and would otherwise round it twice;
+# icon_foreground.png is the black art alone, inset to the Android adaptive safe
+# zone. `flutter pub run flutter_launcher_icons` regenerates the Android mipmaps
+# + adaptive icons and windows/runner/resources/app_icon.ico from the sources
+# below. Linux has no generator support and GNOME draws icons unmasked, so it
+# gets icon_linux.png — the tile with the master's rounded corners kept — used
+# both by linux/runner/my_application.cc and by the installed hicolor icon
+# (see linux/packaging/install.sh, staged by scripts/release.sh).
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   android: true
@@ -95,6 +97,7 @@ flutter:
 
   assets:
     - assets/icon/icon.png
+    - assets/icon/icon_linux.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

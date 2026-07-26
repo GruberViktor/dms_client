@@ -184,7 +184,7 @@ trap 'rm -rf "$STAGE"' EXIT
 cp -a "$BUNDLE/." "$STAGE/"
 cp linux/packaging/install.sh "$STAGE/install.sh"
 chmod +x "$STAGE/install.sh"
-cp assets/icon/icon.png "$STAGE/icon.png"
+cp assets/icon/icon_linux.png "$STAGE/icon.png"   # rounded variant: GNOME does not mask
 
 TARBALL="$DIST_DIR/dms_client-$VERSION-linux-x64.tar.gz"
 tar -czf "$TARBALL" -C "$STAGE" .
