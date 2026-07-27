@@ -32,10 +32,10 @@ token) in flutter_secure_storage.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
   document list (compact search field + type dropdown, type tree as an
   inline collapsible sidebar ≥760px content width / overlay drawer below,
-  Active/All/Archived, date range, metadata filters, infinite scroll —
-  a non-empty query feeds the same card grid from `/search/` instead, and
-  hides the date/metadata chips that endpoint cannot apply; headlines are
-  discarded), document detail (in-app PDF viewer with server-image pager
+  Active/All/Archived, date range, metadata filters, sort control, infinite
+  scroll — a non-empty query feeds the same card grid from `/search/`
+  instead, and hides the date/metadata chips that endpoint cannot apply;
+  headlines are discarded), document detail (in-app PDF viewer with server-image pager
   fallback, metadata card, versions, comments
   card — affordances driven by server-resolved `can_edit`/`can_delete`, composer
   shown optimistically and dropped per type on 403 — timeline, download & open,
@@ -43,6 +43,12 @@ token) in flutter_secure_storage.
   list), notification inbox (unread filter, mark read / read-all,
   email-preference dialog; rows render from `payload`, tap deep-links to the
   document unless it was deleted).
+- `lib/src/widgets/sort_control.dart` — the `ordering` parameter as a filter-bar
+  chip (key menu) plus a direction toggle. Both defaults are sent explicitly
+  (`-date_added` browsing, `-rank` searching) and swap when a query is
+  entered/cleared unless the user picked a sort themselves; metadata keys
+  (`metadata__<key>`) come from the selected type's merged field set. Server
+  400 `invalid_ordering` falls back to the default instead of erroring out.
 - `lib/src/widgets/timeline.dart` — the §6 vertical timeline: version anchor
   cards, grouped view/download events, collapsed ±N diff chips, hidden
   versions struck through, comment nodes (soft-deleted ones stay, struck

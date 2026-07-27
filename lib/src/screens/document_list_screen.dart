@@ -15,6 +15,7 @@ import '../util/format.dart';
 import '../widgets/common.dart';
 import '../widgets/date_range_dropdown.dart';
 import '../widgets/document_card.dart';
+import '../widgets/sort_control.dart';
 import '../widgets/type_tree.dart';
 import 'document_detail_screen.dart';
 import 'upload_screen.dart';
@@ -76,6 +77,11 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   static double _sidebarWidth = _sidebarDefaultWidth;
 
   DocumentFilters _filters = const DocumentFilters();
+
+  /// Browsing and searching have different defaults (`-date_added` vs
+  /// `-rank`); [_applyFilters] swaps them when the mode flips.
+  DocumentSort _sort = DocumentSort.browseDefault;
+
   final _scrollCtrl = ScrollController();
   final _queryCtrl = TextEditingController();
   final _queryFocus = FocusNode();
@@ -139,6 +145,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           f.query,
           type: f.typeSlug,
           archived: f.archivedParam,
+          ordering: _sort.ordering,
           limit: _pageSize,
           offset: offset,
         );
@@ -159,6 +166,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           dateFrom: f.dateRange?.start.toIso8601String().substring(0, 10),
           dateTo: f.dateRange?.end.toIso8601String().substring(0, 10),
           metadataFilters: f.metadata,
+          ordering: _sort.ordering,
           limit: _pageSize,
           offset: offset,
         );
@@ -180,6 +188,23 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         setState(() => _page = last);
         await _loadPage(last);
       }
+    } on ApiException catch (e) {
+      if (!mounted || gen != _requestGen) return;
+      // Unknown ordering keys are rejected, not ignored — a metadata key can
+      // stop existing when the type filter changes. Fall back instead of
+      // stranding the list on an error.
+      final fallback = _defaultSort(_filters.searching);
+      if (e.code == 'invalid_ordering' && _sort != fallback) {
+        final rejected = _sort.key.label;
+        setState(() => _sort = fallback);
+        showSnack(context, 'Cannot sort by “$rejected” here.');
+        return _loadPage(page);
+      }
+      setState(() {
+        _error = e;
+        _loading = false;
+        _initialLoaded = true;
+      });
     } catch (e) {
       if (!mounted || gen != _requestGen) return;
       setState(() {
@@ -190,9 +215,30 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     }
   }
 
+  static DocumentSort _defaultSort(bool searching) =>
+      searching ? DocumentSort.searchDefault : DocumentSort.browseDefault;
+
   void _applyFilters(DocumentFilters f) {
     setState(() {
+      // Relevance exists only while searching, and a search that inherits
+      // "newest first" from browsing would hide its own ranking — so the two
+      // defaults swap, while a sort the user picked deliberately survives.
+      if (f.searching != _filters.searching) {
+        if (_sort == _defaultSort(_filters.searching)) {
+          _sort = _defaultSort(f.searching);
+        } else if (_sort.key == relevanceSortKey) {
+          _sort = DocumentSort.browseDefault;
+        }
+      }
       _filters = f;
+      _page = 0;
+    });
+    _reload();
+  }
+
+  void _applySort(DocumentSort sort) {
+    setState(() {
+      _sort = sort;
       _page = 0;
     });
     _reload();
@@ -389,11 +435,17 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                             typesAsync.value ?? const [],
                           ),
                           _buildFilterBar(context),
-                          const Divider(height: 1),
-                          // Keeps the previous page visible while the next one
-                          // loads.
-                          if (_loading && _initialLoaded)
-                            const LinearProgressIndicator(minHeight: 2),
+                          // The progress bar takes over the rule's own band
+                          // instead of being inserted above the grid — a
+                          // re-sort or page load must not nudge the cards
+                          // down and back up. The previous page stays
+                          // visible underneath while the next one loads.
+                          SizedBox(
+                            height: 2,
+                            child: _loading && _initialLoaded
+                                ? const LinearProgressIndicator(minHeight: 2)
+                                : const Divider(height: 2, thickness: 1),
+                          ),
                           Expanded(child: _buildResults(context, bySlug)),
                           if (_pageCount > 1) ...[
                             const Divider(height: 1),
@@ -699,11 +751,25 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   }
 
   Widget _buildFilterBar(BuildContext context) {
+    // Metadata sort keys are offered for the selected type's merged field set,
+    // the same suggestions the metadata filter dialog uses.
+    final slug = _filters.typeSlug;
+    final sortableMetadata = slug == null
+        ? const <MetadataFieldDef>[]
+        : mergedMetadataFields(ref.read(documentTypesBySlugProvider), slug);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
+          SortControl(
+            sort: _sort,
+            searching: _filters.searching,
+            metadataFields: sortableMetadata,
+            onChanged: _applySort,
+          ),
+          const SizedBox(width: 8),
           // Date range and metadata filters are list-only server-side.
           if (!_filters.searching) ...[
             DateRangeDropdown(

@@ -166,6 +166,7 @@ class ApiClient {
     String? dateFrom,
     String? dateTo,
     Map<String, String> metadataFilters = const {},
+    String? ordering, // comma-separated keys, "-" = descending
     int limit = 50,
     int offset = 0,
   }) async {
@@ -175,6 +176,7 @@ class ApiClient {
       'document_date_from': ?dateFrom,
       'document_date_to': ?dateTo,
       for (final e in metadataFilters.entries) 'metadata__${e.key}': e.value,
+      'ordering': ?ordering,
       'limit': limit,
       'offset': offset,
     };
@@ -379,6 +381,7 @@ class ApiClient {
     String q, {
     String? type,
     String? archived,
+    String? ordering, // as on /documents/, plus "rank" (relevance)
     int limit = 50,
     int offset = 0,
   }) async {
@@ -386,6 +389,7 @@ class ApiClient {
       'q': q,
       'type': ?type,
       'archived': ?archived,
+      'ordering': ?ordering,
       'limit': limit,
       'offset': offset,
     });
