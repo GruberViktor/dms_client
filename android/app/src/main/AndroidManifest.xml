@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app talks to the DMS server over the network in every build flavour;
+         the template only declares this for debug/profile. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="LUVI Docs"
         android:name="${applicationName}"

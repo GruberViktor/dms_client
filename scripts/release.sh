@@ -11,6 +11,7 @@
 # If the release already exists, its assets are replaced in place (--clobber).
 # The script refuses to do that once an asset has been downloaded — cut a new
 # version instead, so nobody ends up with two different files under one name.
+# Use --allow-downloaded when the downloads were only your own.
 #
 set -euo pipefail
 
@@ -26,6 +27,7 @@ DRAFT=0
 PRERELEASE=0
 UNIVERSAL_APK=0
 ALLOW_DIRTY=0
+ALLOW_DOWNLOADED=0
 RETAG=0
 ASSUME_YES=0
 NOTES_FILE=""
@@ -56,6 +58,8 @@ Options:
   --universal-apk  one fat APK instead of per-ABI APKs
   --retag          move an existing tag to HEAD (force pushes the tag)
   --allow-dirty    permit an unclean working tree
+  --allow-downloaded
+                   replace assets even if they have already been downloaded
   --notes-file F   use F as the release body
   -y, --yes        do not prompt for confirmation
 EOF
@@ -69,6 +73,7 @@ while [ $# -gt 0 ]; do
         --universal-apk) UNIVERSAL_APK=1 ;;
         --retag)         RETAG=1 ;;
         --allow-dirty)   ALLOW_DIRTY=1 ;;
+        --allow-downloaded) ALLOW_DOWNLOADED=1 ;;
         --notes-file)    NOTES_FILE="${2:-}"; shift ;;
         -y|--yes)        ASSUME_YES=1 ;;
         -h|--help)       usage; exit 0 ;;
@@ -137,11 +142,17 @@ if [ "$RELEASE_EXISTS" -eq 1 ]; then
     DOWNLOADED="$(gh release view "$TAG" --json assets \
         -q '[.assets[] | select(.downloadCount > 0) | "\(.name) (\(.downloadCount))"] | join(", ")')"
     if [ -n "$DOWNLOADED" ]; then
-        die "release $TAG already has downloaded assets: $DOWNLOADED
+        if [ "$ALLOW_DOWNLOADED" -eq 1 ]; then
+            warn "replacing already-downloaded assets of $TAG: $DOWNLOADED"
+        else
+            die "release $TAG already has downloaded assets: $DOWNLOADED
        replacing them would hand different files to people under the same
-       version — bump the version and release that instead"
+       version — bump the version and release that instead, or pass
+       --allow-downloaded if those downloads were your own"
+        fi
+    else
+        warn "release $TAG exists with no downloads yet; its assets will be replaced"
     fi
-    warn "release $TAG exists with no downloads yet; its assets will be replaced"
 fi
 
 echo "  app:      $APP_NAME $VERSION"
