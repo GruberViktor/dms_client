@@ -50,16 +50,16 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
   bool _busy = false;
 
   static const _sources = {
-    'metadata': 'Metadata key',
-    'document_date': 'Document date',
-    'document_type': 'Document type',
-    'added_by': 'Added by',
+    'metadata': 'Metadatenschlüssel',
+    'document_date': 'Dokumentdatum',
+    'document_type': 'Dokumenttyp',
+    'added_by': 'Hinzugefügt von',
   };
   static const _transforms = {
-    'none': 'As-is',
-    'year': 'Year',
-    'year_month': 'Year + month',
-    'first_letter': 'First letter',
+    'none': 'Unverändert',
+    'year': 'Jahr',
+    'year_month': 'Jahr + Monat',
+    'first_letter': 'Anfangsbuchstabe',
   };
 
   @override
@@ -73,7 +73,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_levels.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Add at least one level.')));
+          const SnackBar(content: Text('Bitte mindestens eine Ebene hinzufügen.')));
       return;
     }
     final body = {
@@ -128,7 +128,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existing != null ? 'Edit index' : 'New index'),
+        title: Text(widget.existing != null ? 'Index bearbeiten' : 'Neuer Index'),
         actions: [
           TextButton(
             onPressed: _busy ? null : _save,
@@ -138,7 +138,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : const Text('Speichern'),
           ),
           const SizedBox(width: 8),
         ],
@@ -158,7 +158,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
                   onChanged: (v) {
                     if (widget.existing == null) {
                       _slugCtrl.text = _slugify(v);
@@ -171,14 +171,14 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                   controller: _slugCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Slug *',
-                    helperText: 'API identifier, e.g. by-vendor',
+                    helperText: 'API-Bezeichner, z. B. nach-lieferant',
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) {
                     final t = (v ?? '').trim();
-                    if (t.isEmpty) return 'Required';
+                    if (t.isEmpty) return 'Pflichtfeld';
                     if (!RegExp(r'^[-a-zA-Z0-9_]+$').hasMatch(t)) {
-                      return 'Only letters, digits, - and _';
+                      return 'Nur Buchstaben, Ziffern, - und _';
                     }
                     return null;
                   },
@@ -190,12 +190,12 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                 DropdownButtonFormField<String?>(
                   initialValue: _rootType,
                   decoration: const InputDecoration(
-                    labelText: 'Restrict to type (optional)',
+                    labelText: 'Auf Typ beschränken (optional)',
                     border: OutlineInputBorder(),
                   ),
                   items: [
                     const DropdownMenuItem<String?>(
-                        value: null, child: Text('All documents')),
+                        value: null, child: Text('Alle Dokumente')),
                     for (final t in types)
                       DropdownMenuItem<String?>(
                         value: t.slug,
@@ -207,8 +207,8 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Shared'),
-                  subtitle: const Text('Visible to all users'),
+                  title: const Text('Geteilt'),
+                  subtitle: const Text('Für alle Benutzer sichtbar'),
                   value: _shared,
                   onChanged:
                       _busy ? null : (v) => setState(() => _shared = v),
@@ -217,7 +217,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text('Levels',
+                      child: Text('Ebenen',
                           style: Theme.of(context).textTheme.titleMedium),
                     ),
                     TextButton.icon(
@@ -225,7 +225,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                           ? null
                           : () => setState(() => _levels.add(_LevelDraft())),
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add level'),
+                      label: const Text('Ebene hinzufügen'),
                     ),
                   ],
                 ),
@@ -240,18 +240,18 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
     );
   }
 
-  /// The "Metadata key" input for a level. When the index is restricted to a
+  /// The "Metadatenschlüssel" input for a level. When the index is restricted to a
   /// type, the type's (inherited) metadata fields are offered as suggestions
   /// while still allowing a free-typed key.
   Widget _buildMetadataKeyField(
       _LevelDraft level, List<MetadataFieldDef> rootFields) {
     const decoration = InputDecoration(
-      labelText: 'Metadata key *',
+      labelText: 'Metadatenschlüssel *',
       border: OutlineInputBorder(),
       isDense: true,
     );
     String? validate(String? v) =>
-        (v == null || v.trim().isEmpty) ? 'Required' : null;
+        (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null;
 
     if (rootFields.isEmpty) {
       return TextFormField(
@@ -325,7 +325,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                   child: DropdownButtonFormField<String>(
                     initialValue: level.source,
                     decoration: const InputDecoration(
-                      labelText: 'Group by',
+                      labelText: 'Gruppieren nach',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -340,13 +340,13 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Remove level',
+                  tooltip: 'Ebene entfernen',
                   icon: const Icon(Icons.delete_outline, size: 20),
                   onPressed:
                       _busy ? null : () => setState(() => _levels.removeAt(i)),
                 ),
                 IconButton(
-                  tooltip: 'Move up',
+                  tooltip: 'Nach oben',
                   icon: const Icon(Icons.arrow_upward, size: 18),
                   onPressed: (_busy || i == 0)
                       ? null
@@ -368,7 +368,7 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                   child: DropdownButtonFormField<String>(
                     initialValue: level.transform,
                     decoration: const InputDecoration(
-                      labelText: 'Transform',
+                      labelText: 'Umwandlung',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -385,7 +385,10 @@ class _IndexEditScreenState extends ConsumerState<IndexEditScreen> {
                 const SizedBox(width: 8),
                 Column(
                   children: [
-                    const Text('Desc', style: TextStyle(fontSize: 11)),
+                    const Tooltip(
+                      message: 'Absteigend sortieren',
+                      child: Text('Abst.', style: TextStyle(fontSize: 11)),
+                    ),
                     Checkbox(
                       value: level.descending,
                       onChanged: _busy

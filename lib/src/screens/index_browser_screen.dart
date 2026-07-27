@@ -41,19 +41,21 @@ class _IndexListScreenState extends ConsumerState<IndexListScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete index "${ix.name}"?'),
-        content: const Text('Only the view is removed — documents stay.'),
+        title: Text('Index „${ix.name}“ löschen?'),
+        content: const Text(
+          'Nur die Ansicht wird entfernt — die Dokumente bleiben erhalten.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Löschen'),
           ),
         ],
       ),
@@ -77,10 +79,10 @@ class _IndexListScreenState extends ConsumerState<IndexListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Indexes')),
+      appBar: AppBar(title: const Text('Indizes')),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
-        label: const Text('New index'),
+        label: const Text('Neuer Index'),
         onPressed: () => _openEditor(),
       ),
       body: _error != null
@@ -88,7 +90,7 @@ class _IndexListScreenState extends ConsumerState<IndexListScreen> {
           : _indexes == null
               ? const Center(child: CircularProgressIndicator())
               : _indexes!.isEmpty
-                  ? const Center(child: Text('No indexes defined yet.'))
+                  ? const Center(child: Text('Noch keine Indizes angelegt.'))
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(
@@ -103,7 +105,7 @@ class _IndexListScreenState extends ConsumerState<IndexListScreen> {
                                 [
                                   for (final l in ix.levels)
                                     l.source == 'metadata'
-                                        ? (l.sourceKey ?? 'metadata')
+                                        ? (l.sourceKey ?? 'Metadaten')
                                         : l.source,
                                 ].join(' › '),
                               ),
@@ -112,7 +114,7 @@ class _IndexListScreenState extends ConsumerState<IndexListScreen> {
                                 children: [
                                   if (ix.shared)
                                     const Tooltip(
-                                      message: 'Shared',
+                                      message: 'Geteilt',
                                       child: Icon(Icons.group_outlined,
                                           size: 18),
                                     ),
@@ -123,10 +125,10 @@ class _IndexListScreenState extends ConsumerState<IndexListScreen> {
                                     itemBuilder: (context) => const [
                                       PopupMenuItem(
                                           value: 'edit',
-                                          child: Text('Edit')),
+                                          child: Text('Bearbeiten')),
                                       PopupMenuItem(
                                           value: 'delete',
-                                          child: Text('Delete')),
+                                          child: Text('Löschen')),
                                     ],
                                   ),
                                 ],
@@ -242,7 +244,7 @@ class _IndexDrillScreenState extends ConsumerState<IndexDrillScreen> {
   Widget _buildNodes() {
     final nodes = _nodes ?? const <IndexNode>[];
     if (nodes.isEmpty) {
-      return const Center(child: Text('Empty.'));
+      return const Center(child: Text('Leer.'));
     }
     return ListView.builder(
       itemCount: nodes.length,
@@ -269,7 +271,7 @@ class _IndexDrillScreenState extends ConsumerState<IndexDrillScreen> {
 
   Widget _buildDocuments() {
     if (_docs.isEmpty) {
-      return const Center(child: Text('No documents.'));
+      return const Center(child: Text('Keine Dokumente.'));
     }
     final api = ref.read(apiProvider);
     final bySlug = ref.watch(documentTypesBySlugProvider);

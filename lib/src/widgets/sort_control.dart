@@ -19,9 +19,10 @@ class SortKey {
   bool get defaultDescending => kind != SortKind.text;
 
   String directionLabel({required bool descending}) => switch (kind) {
-    SortKind.date => descending ? 'Newest first' : 'Oldest first',
-    SortKind.number => descending ? 'Highest first' : 'Lowest first',
-    SortKind.relevance => descending ? 'Best match first' : 'Weakest first',
+    SortKind.date => descending ? 'Neueste zuerst' : 'Älteste zuerst',
+    SortKind.number => descending ? 'Höchste zuerst' : 'Niedrigste zuerst',
+    SortKind.relevance =>
+      descending ? 'Beste Treffer zuerst' : 'Schwächste zuerst',
     SortKind.text => descending ? 'Z → A' : 'A → Z',
   };
 
@@ -45,21 +46,21 @@ class SortKey {
 }
 
 /// Search-only relevance key; the default ordering of `/search/`.
-const relevanceSortKey = SortKey('rank', 'Relevance', SortKind.relevance);
+const relevanceSortKey = SortKey('rank', 'Relevanz', SortKind.relevance);
 
 /// Default ordering of the list endpoint.
-const dateAddedSortKey = SortKey('date_added', 'Date added', SortKind.date);
+const dateAddedSortKey = SortKey('date_added', 'Hinzugefügt am', SortKind.date);
 
 /// The keys every document-returning endpoint accepts, in menu order.
 const commonSortKeys = <SortKey>[
   dateAddedSortKey,
-  SortKey('document_date', 'Document date', SortKind.date),
-  SortKey('title', 'Title', SortKind.text),
-  SortKey('document_type', 'Type', SortKind.text),
-  SortKey('added_by', 'Added by', SortKind.text),
-  SortKey('mime_type', 'File type', SortKind.text),
-  SortKey('retention_until', 'Retention until', SortKind.date),
-  SortKey('archived_at', 'Archived at', SortKind.date),
+  SortKey('document_date', 'Dokumentdatum', SortKind.date),
+  SortKey('title', 'Titel', SortKind.text),
+  SortKey('document_type', 'Typ', SortKind.text),
+  SortKey('added_by', 'Hinzugefügt von', SortKind.text),
+  SortKey('mime_type', 'Dateityp', SortKind.text),
+  SortKey('retention_until', 'Aufbewahrung bis', SortKind.date),
+  SortKey('archived_at', 'Archiviert am', SortKind.date),
 ];
 
 /// A chosen ordering, ready for the `ordering` query parameter.
@@ -142,7 +143,7 @@ class SortControl extends StatelessWidget {
           menuChildren: [
             for (final (i, k) in _keys.indexed) ...[
               if (i == metadataStart && metadataFields.isNotEmpty)
-                _sectionLabel(context, 'Metadata'),
+                _sectionLabel(context, 'Metadaten'),
               MenuItemButton(
                 leadingIcon: Icon(
                   Icons.check,
@@ -160,7 +161,7 @@ class SortControl extends StatelessWidget {
           builder: (context, controller, _) => ActionChip(
             avatar: const Icon(Icons.sort, size: 18),
             label: Text(sort.key.label),
-            tooltip: 'Sort by',
+            tooltip: 'Sortieren nach',
             visualDensity: VisualDensity.compact,
             onPressed: () =>
                 controller.isOpen ? controller.close() : controller.open(),
@@ -172,7 +173,7 @@ class SortControl extends StatelessWidget {
             size: 18,
           ),
           visualDensity: VisualDensity.compact,
-          tooltip: '${sort.directionLabel} — tap to reverse',
+          tooltip: '${sort.directionLabel} — zum Umkehren klicken',
           color: theme.colorScheme.onSurfaceVariant,
           onPressed: () => onChanged(sort.reversed),
         ),

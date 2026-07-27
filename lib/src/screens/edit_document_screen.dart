@@ -115,7 +115,7 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit document'),
+        title: const Text('Dokument bearbeiten'),
         actions: [
           TextButton(
             onPressed: _busy ? null : _save,
@@ -125,7 +125,7 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : const Text('Speichern'),
           ),
           const SizedBox(width: 8),
         ],
@@ -141,11 +141,11 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
                 TextFormField(
                   controller: _titleCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Title *',
+                    labelText: 'Titel *',
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
                   enabled: !_busy,
                 ),
                 const SizedBox(height: 12),
@@ -154,7 +154,7 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
                   borderRadius: BorderRadius.circular(4),
                   child: InputDecorator(
                     decoration: InputDecoration(
-                      labelText: 'Document date',
+                      labelText: 'Dokumentdatum',
                       border: const OutlineInputBorder(),
                       suffixIcon: _documentDate != null
                           ? IconButton(
@@ -174,7 +174,7 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
                 TextFormField(
                   controller: _notesCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Notes',
+                    labelText: 'Notizen',
                     border: OutlineInputBorder(),
                   ),
                   maxLines: 3,
@@ -182,7 +182,7 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
                 ),
                 if (fields.isNotEmpty) ...[
                   const SizedBox(height: 20),
-                  Text('Metadata',
+                  Text('Metadaten',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                   // Required is not enforced on PATCH (spec §3).

@@ -48,7 +48,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.detail);
     } catch (e) {
-      setState(() => _error = 'Could not reach the server: $e');
+      setState(() => _error = 'Server nicht erreichbar: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -83,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   TextFormField(
                     controller: _serverCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Server URL',
+                      labelText: 'Server-URL',
                       hintText: 'https://dms.example.com',
                       prefixIcon: Icon(Icons.dns_outlined),
                       border: OutlineInputBorder(),
@@ -91,34 +91,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     keyboardType: TextInputType.url,
                     autofillHints: const [AutofillHints.url],
                     validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
                     enabled: !_busy,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _userCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Username',
+                      labelText: 'Benutzername',
                       prefixIcon: Icon(Icons.person_outline),
                       border: OutlineInputBorder(),
                     ),
                     autofillHints: const [AutofillHints.username],
                     validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
                     enabled: !_busy,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _passCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Password',
+                      labelText: 'Passwort',
                       prefixIcon: Icon(Icons.key_outlined),
                       border: OutlineInputBorder(),
                     ),
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
                     validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Required' : null,
+                        (v == null || v.isEmpty) ? 'Pflichtfeld' : null,
                     onFieldSubmitted: (_) => _submit(),
                     enabled: !_busy,
                   ),
@@ -141,7 +141,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Sign in'),
+                        : const Text('Anmelden'),
                   ),
                 ],
               ),

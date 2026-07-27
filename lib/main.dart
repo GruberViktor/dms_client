@@ -1,13 +1,23 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 
 import 'src/screens/home_screen.dart';
 import 'src/screens/login_screen.dart';
 import 'src/state/session.dart';
 import 'src/theme/adwaita_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // The UI is German-only, so pin intl's default locale once instead of
+  // threading a locale through every DateFormat/NumberFormat call site.
+  // The top-level DateFormats in util/format.dart are lazy, so they pick
+  // this up as long as it is set before the first frame.
+  Intl.defaultLocale = 'de_DE';
+  await initializeDateFormatting('de_DE');
   runApp(const ProviderScope(child: DmsApp()));
 }
 
@@ -25,6 +35,13 @@ class DmsApp extends ConsumerWidget {
     return MaterialApp(
       title: 'LUVI Docs',
       navigatorKey: _rootNavigatorKey,
+      locale: const Locale('de', 'DE'),
+      supportedLocales: const [Locale('de', 'DE')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       // Route mouse back/forward side-buttons to navigation.
       builder: (context, child) => Listener(
         onPointerDown: (event) {

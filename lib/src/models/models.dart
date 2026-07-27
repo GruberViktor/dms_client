@@ -42,6 +42,21 @@ FieldType fieldTypeFromWire(String? s) => switch (s) {
       _ => FieldType.unknown,
     };
 
+/// German label for display. The enum's own names are the wire vocabulary and
+/// must not be shown to the user.
+extension FieldTypeLabel on FieldType {
+  String get label => switch (this) {
+        FieldType.text => 'Text',
+        FieldType.date => 'Datum',
+        FieldType.integer => 'Ganzzahl',
+        FieldType.float => 'Dezimalzahl',
+        FieldType.monetary => 'Betrag',
+        FieldType.boolean => 'Ja/Nein',
+        FieldType.url => 'URL',
+        FieldType.unknown => 'unbekannt',
+      };
+}
+
 class MetadataFieldDef {
   final int? id; // DB id — present on the admin list endpoint
   final String key;
@@ -763,6 +778,22 @@ const aclPermissions = [
   'edit_any_comment',
   'delete_any_comment',
 ];
+
+/// German label for an ACL permission; the codes above are the wire values.
+String aclPermissionLabel(String permission) => switch (permission) {
+      'view' => 'Ansehen',
+      'edit_metadata' => 'Metadaten bearbeiten',
+      'upload_version' => 'Version hochladen',
+      'release_version' => 'Version freigeben',
+      'delete' => 'Löschen',
+      'archive' => 'Archivieren',
+      'download' => 'Herunterladen',
+      'manage_acl' => 'Berechtigungen verwalten',
+      'comment' => 'Kommentieren',
+      'edit_any_comment' => 'Fremde Kommentare bearbeiten',
+      'delete_any_comment' => 'Fremde Kommentare löschen',
+      _ => permission,
+    };
 
 /// One inbox row (notifications hand-off §2). Named to avoid clashing with
 /// Flutter's `Notification`. Render from [payload] — it snapshots the

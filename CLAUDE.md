@@ -59,6 +59,18 @@ token) in flutter_secure_storage.
 
 ## Conventions
 
+- **The UI is German.** Strings are hardcoded German in place — there is no
+  ARB/gen-l10n setup and no second locale. New user-facing text goes in
+  German directly. `main()` pins `Intl.defaultLocale = 'de_DE'` and
+  `MaterialApp` ships `flutter_localizations` with `locale: de_DE`, so stock
+  Material widgets (date picker, text-selection menu) and every `DateFormat`
+  in `util/format.dart` are German too. `intl` is pinned to `^0.20.2` by
+  `flutter_localizations` — do not raise it. Wire vocabulary stays English:
+  enum names, audit action codes, ACL permission codes, `ordering` keys,
+  metadata keys. Where such a code is shown to the user, translate it at the
+  display site (`FieldTypeLabel.label`, `aclPermissionLabel`, the audit label
+  maps in `widgets/timeline.dart` and `screens/notifications_screen.dart`).
+  Server-produced error `detail` strings pass through untranslated.
 - Monetary metadata values are decimal **strings** on the wire — never parse
   to double (use `decimal` when arithmetic is needed).
 - Multipart uploads: `metadata` must be a JSON-encoded *string* form field.

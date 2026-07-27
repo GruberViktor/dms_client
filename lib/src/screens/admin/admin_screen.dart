@@ -20,9 +20,9 @@ class AdminScreen extends ConsumerWidget {
         appBar: AppBar(
           title: const Text('Administration'),
           bottom: const TabBar(tabs: [
-            Tab(text: 'Document types'),
-            Tab(text: 'Retention policies'),
-            Tab(text: 'Storages'),
+            Tab(text: 'Dokumenttypen'),
+            Tab(text: 'Aufbewahrungsregeln'),
+            Tab(text: 'Speicher'),
           ]),
         ),
         body: const TabBarView(children: [
@@ -53,7 +53,7 @@ class _TypesTab extends ConsumerWidget {
         floatingActionButton: FloatingActionButton.extended(
           heroTag: 'admin-new-type',
           icon: const Icon(Icons.add),
-          label: const Text('New type'),
+          label: const Text('Neuer Typ'),
           onPressed: () async {
             final changed =
                 await Navigator.of(context).push<bool>(MaterialPageRoute(
@@ -77,7 +77,7 @@ class _TypesTab extends ConsumerWidget {
                     if (!t.isActive)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
-                        child: Text('inactive',
+                        child: Text('inaktiv',
                             style: Theme.of(context)
                                 .textTheme
                                 .labelSmall
@@ -93,7 +93,7 @@ class _TypesTab extends ConsumerWidget {
                   ],
                 ),
                 subtitle: Text(
-                  '${t.slug} · ${t.metadataFields.length} own field(s)',
+                  '${t.slug} · ${t.metadataFields.length} eigene Felder',
                 ),
                 onTap: () async {
                   final changed = await Navigator.of(context)
@@ -143,7 +143,7 @@ class _RetentionTab extends ConsumerWidget {
         floatingActionButton: FloatingActionButton.extended(
           heroTag: 'admin-new-policy',
           icon: const Icon(Icons.add),
-          label: const Text('New policy'),
+          label: const Text('Neue Regel'),
           onPressed: () => _edit(context, ref),
         ),
         body: ListView(
@@ -155,13 +155,13 @@ class _RetentionTab extends ConsumerWidget {
                     : Icons.lock_open_outlined),
                 title: Text(p.name),
                 subtitle: Text(p.retentionYears != null
-                    ? '${p.retentionYears} years from '
-                        '${p.anchor == 'date_added' ? 'upload date' : 'document date'}'
-                        '${p.isCompliance ? ' · compliance' : ''}'
-                    : 'No retention (freely editable)'),
+                    ? '${p.retentionYears} Jahre ab '
+                        '${p.anchor == 'date_added' ? 'Upload-Datum' : 'Dokumentdatum'}'
+                        '${p.isCompliance ? ' · Aufbewahrungspflicht' : ''}'
+                    : 'Keine Aufbewahrung (frei bearbeitbar)'),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Delete',
+                  tooltip: 'Löschen',
                   onPressed: () async {
                     try {
                       await ref
@@ -236,8 +236,8 @@ class _RetentionDialogState extends ConsumerState<_RetentionDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.existing != null
-          ? 'Edit retention policy'
-          : 'New retention policy'),
+          ? 'Aufbewahrungsregel bearbeiten'
+          : 'Neue Aufbewahrungsregel'),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -256,8 +256,8 @@ class _RetentionDialogState extends ConsumerState<_RetentionDialog> {
             TextField(
               controller: _yearsCtrl,
               decoration: const InputDecoration(
-                labelText: 'Retention years',
-                helperText: 'Empty = no compliance, freely editable',
+                labelText: 'Aufbewahrungsjahre',
+                helperText: 'Leer = keine Aufbewahrungspflicht, frei bearbeitbar',
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
@@ -267,14 +267,14 @@ class _RetentionDialogState extends ConsumerState<_RetentionDialog> {
             DropdownButtonFormField<String>(
               initialValue: _anchor,
               decoration: const InputDecoration(
-                labelText: 'Anchor',
+                labelText: 'Stichtag',
                 border: OutlineInputBorder(),
               ),
               items: const [
                 DropdownMenuItem(
-                    value: 'document_date', child: Text('Document date')),
+                    value: 'document_date', child: Text('Dokumentdatum')),
                 DropdownMenuItem(
-                    value: 'date_added', child: Text('Upload date')),
+                    value: 'date_added', child: Text('Upload-Datum')),
               ],
               onChanged:
                   _busy ? null : (v) => setState(() => _anchor = v!),
@@ -285,11 +285,11 @@ class _RetentionDialogState extends ConsumerState<_RetentionDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+          child: const Text('Abbrechen'),
         ),
         FilledButton(
           onPressed: _busy ? null : _save,
-          child: const Text('Save'),
+          child: const Text('Speichern'),
         ),
       ],
     );
@@ -318,9 +318,10 @@ class _StoragesTab extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(
-              'Storages are listed read-only here — backend/config changes '
-              'affect stored files and belong in a controlled server-side '
-              'rollout. Only the flags below can be toggled.',
+              'Speicher werden hier nur lesend angezeigt — Änderungen an '
+              'Backend oder Konfiguration betreffen gespeicherte Dateien und '
+              'gehören in einen kontrollierten serverseitigen Rollout. Nur '
+              'die Schalter unten lassen sich umstellen.',
             ),
           ),
           for (final s in storages)
@@ -335,7 +336,7 @@ class _StoragesTab extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(left: 8),
                       child: Chip(
-                        label: const Text('default'),
+                        label: const Text('Standard'),
                         visualDensity: VisualDensity.compact,
                         labelStyle:
                             Theme.of(context).textTheme.labelSmall,
@@ -346,14 +347,14 @@ class _StoragesTab extends ConsumerWidget {
               subtitle: Text([
                 s.backend,
                 if (s.objectLockEnabled)
-                  'object lock${s.defaultLockMode != null ? ' (${s.defaultLockMode})' : ''}',
-                if (s.readOnly) 'read-only',
-                if (!s.isActive) 'inactive',
+                  'Object Lock${s.defaultLockMode != null ? ' (${s.defaultLockMode})' : ''}',
+                if (s.readOnly) 'schreibgeschützt',
+                if (!s.isActive) 'inaktiv',
               ].join(' · ')),
               trailing: s.isDefault
                   ? null
                   : TextButton(
-                      child: const Text('Make default'),
+                      child: const Text('Als Standard setzen'),
                       onPressed: () async {
                         try {
                           await ref

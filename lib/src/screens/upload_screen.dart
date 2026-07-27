@@ -102,16 +102,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       final more = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Page ${pages.length} captured'),
-          content: const Text('Capture another page?'),
+          title: Text('Seite ${pages.length} aufgenommen'),
+          content: const Text('Noch eine Seite aufnehmen?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Done'),
+              child: const Text('Fertig'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Add page'),
+              child: const Text('Seite hinzufügen'),
             ),
           ],
         ),
@@ -158,8 +158,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('No file selected'),
-          content: const Text('Pick a file or capture pages first.'),
+          title: const Text('Keine Datei ausgewählt'),
+          content: const Text('Bitte zuerst eine Datei wählen oder Seiten aufnehmen.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -213,7 +213,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      _showError('Upload failed: $e');
+      _showError('Upload fehlgeschlagen: $e');
     }
   }
 
@@ -230,12 +230,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.copy_all_outlined),
-        title: const Text('Identical file already exists'),
+        title: const Text('Identische Datei existiert bereits'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('The same bytes are already stored in:'),
+            const Text('Genau dieselbe Datei ist bereits gespeichert in:'),
             const SizedBox(height: 8),
             for (final uuid in e.duplicateOf)
               _DuplicateLink(uuid: uuid, onOpen: () {
@@ -249,14 +249,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton.tonal(
             onPressed: () {
               Navigator.pop(context);
               _submit(force: true);
             },
-            child: const Text('Upload anyway'),
+            child: const Text('Trotzdem hochladen'),
           ),
         ],
       ),
@@ -276,7 +276,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         _typeSlug != null ? mergedMetadataFields(bySlug, _typeSlug!) : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload document')),
+      appBar: AppBar(title: const Text('Dokument hochladen')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
@@ -298,14 +298,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                             FilledButton.tonalIcon(
                               onPressed: _busy ? null : _pickFile,
                               icon: const Icon(Icons.attach_file),
-                              label: const Text('Choose file'),
+                              label: const Text('Datei wählen'),
                             ),
                             if (_isMobile) ...[
                               const SizedBox(width: 8),
                               FilledButton.tonalIcon(
                                 onPressed: _busy ? null : _captureFromCamera,
                                 icon: const Icon(Icons.photo_camera_outlined),
-                                label: const Text('Camera'),
+                                label: const Text('Kamera'),
                               ),
                             ],
                           ],
@@ -339,7 +339,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _typeSlug,
                   decoration: const InputDecoration(
-                    labelText: 'Document type *',
+                    labelText: 'Dokumenttyp *',
                     border: OutlineInputBorder(),
                   ),
                   items: [
@@ -349,7 +349,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                         child: Text('${'    ' * t.depth}${t.name}'),
                       ),
                   ],
-                  validator: (v) => v == null ? 'Required' : null,
+                  validator: (v) => v == null ? 'Pflichtfeld' : null,
                   onChanged: _busy
                       ? null
                       : (slug) => setState(() => _typeSlug = slug),
@@ -359,11 +359,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 TextFormField(
                   controller: _titleCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Title *',
+                    labelText: 'Titel *',
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
                   onChanged: (_) => _titleEdited = true,
                   enabled: !_busy,
                 ),
@@ -374,7 +374,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   borderRadius: BorderRadius.circular(4),
                   child: InputDecorator(
                     decoration: InputDecoration(
-                      labelText: 'Document date',
+                      labelText: 'Dokumentdatum',
                       border: const OutlineInputBorder(),
                       suffixIcon: _documentDate != null
                           ? IconButton(
@@ -394,7 +394,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 TextFormField(
                   controller: _notesCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Notes',
+                    labelText: 'Notizen',
                     border: OutlineInputBorder(),
                   ),
                   maxLines: 3,
@@ -404,7 +404,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 // --- Typed metadata (from the type's merged definitions) ---
                 if (fields != null && fields.isNotEmpty) ...[
                   const SizedBox(height: 20),
-                  Text('Metadata',
+                  Text('Metadaten',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                   MetadataFormFields(
@@ -424,7 +424,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.upload_file),
-                  label: const Text('Upload'),
+                  label: const Text('Hochladen'),
                 ),
                 const SizedBox(height: 24),
               ],

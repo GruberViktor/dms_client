@@ -41,7 +41,7 @@ class _TypeTreeState extends State<TypeTree> {
         dense: true,
         selected: widget.selectedSlug == null,
         leading: const Icon(Icons.all_inbox_outlined, size: 20),
-        title: const Text('All documents'),
+        title: const Text('Alle Dokumente'),
         onTap: () => widget.onSelected(null),
       ),
     ];
@@ -87,8 +87,8 @@ class _TypeTreeState extends State<TypeTree> {
                     ),
                     visualDensity: VisualDensity.compact,
                     tooltip: widget.watchedSlugs.contains(t.slug)
-                        ? 'Stop watching this category'
-                        : 'Watch this category (incl. subtypes)',
+                        ? 'Kategorie nicht mehr beobachten'
+                        : 'Kategorie beobachten (inkl. Unterkategorien)',
                     icon: Icon(
                       widget.watchedSlugs.contains(t.slug)
                           ? Icons.notifications_active

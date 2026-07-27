@@ -64,17 +64,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
     final destinations = [
       // Search lives in the document list itself.
-      (icon: const Icon(Icons.description_outlined), label: 'Documents'),
-      (icon: const Icon(Icons.account_tree_outlined), label: 'Indexes'),
-      (icon: inboxIcon, label: 'Inbox'),
+      (icon: const Icon(Icons.description_outlined), label: 'Dokumente'),
+      (icon: const Icon(Icons.account_tree_outlined), label: 'Indizes'),
+      (icon: inboxIcon, label: 'Posteingang'),
       // Admin area is gated on is_superuser (spec §7 M4).
       if (isAdmin)
-        (icon: const Icon(Icons.admin_panel_settings_outlined), label: 'Admin'),
+        (icon: const Icon(Icons.admin_panel_settings_outlined), label: 'Verwaltung'),
     ];
     if (_tab >= destinations.length) _tab = 0;
 
     final logoutButton = IconButton(
-      tooltip: 'Sign out${session != null ? ' (${session.user.username})' : ''}',
+      tooltip: 'Abmelden${session != null ? ' (${session.user.username})' : ''}',
       icon: const Icon(Icons.logout),
       onPressed: () => ref.read(sessionProvider.notifier).logout(),
     );

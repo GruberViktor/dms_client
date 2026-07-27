@@ -103,7 +103,7 @@ class _DocumentCardState extends State<DocumentCard> {
       final full = await widget.api.document(uuid);
       final v = full.currentVersion;
       if (v == null) {
-        if (mounted) showSnack(context, 'No downloadable version.');
+        if (mounted) showSnack(context, 'Keine herunterladbare Version vorhanden.');
         return;
       }
       final bytes = asPdf
@@ -119,12 +119,12 @@ class _DocumentCardState extends State<DocumentCard> {
       await file.writeAsBytes(bytes);
       final opened = await openExternally(file.path);
       if (mounted && !opened) {
-        showSnack(context, 'Saved to ${file.path}');
+        showSnack(context, 'Gespeichert unter ${file.path}');
       }
     } on ApiException catch (e) {
       if (mounted) showSnack(context, e.detail);
     } catch (e) {
-      if (mounted) showSnack(context, 'Download failed: $e');
+      if (mounted) showSnack(context, 'Download fehlgeschlagen: $e');
     } finally {
       if (mounted) setState(() => _busyAction = null);
     }
@@ -162,12 +162,12 @@ class _DocumentCardState extends State<DocumentCard> {
                           if (d.inComplianceMode)
                             _Badge(
                               icon: Icons.lock_outline,
-                              tooltip: 'Under retention',
+                              tooltip: 'Aufbewahrungspflicht',
                             ),
                           if (d.archived)
                             _Badge(
                               icon: Icons.inventory_2_outlined,
-                              tooltip: 'Archived',
+                              tooltip: 'Archiviert',
                             ),
                         ],
                       ),
@@ -216,7 +216,7 @@ class _DocumentCardState extends State<DocumentCard> {
                   ),
                   Expanded(
                     child: IconButton(
-                      tooltip: 'Download & open',
+                      tooltip: 'Herunterladen & öffnen',
                       icon: _busyAction == 'file'
                           ? const SizedBox(
                               width: 18,
@@ -232,7 +232,7 @@ class _DocumentCardState extends State<DocumentCard> {
                   if (canDownloadAsPdf(d.mimeType))
                     Expanded(
                       child: IconButton(
-                        tooltip: 'Download as PDF',
+                        tooltip: 'Als PDF herunterladen',
                         icon: _busyAction == 'pdf'
                             ? const SizedBox(
                                 width: 18,

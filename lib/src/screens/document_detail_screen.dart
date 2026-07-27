@@ -113,7 +113,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         await api.archiveDocument(doc.uuid);
       }
       if (mounted) {
-        showSnack(context, doc.archived ? 'Unarchived.' : 'Archived.');
+        showSnack(context, doc.archived ? 'Dearchiviert.' : 'Archiviert.');
       }
       await _load();
     } on ApiException catch (e) {
@@ -129,19 +129,19 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete document?'),
-        content: Text('"${doc.title}" will be permanently deleted.'),
+        title: const Text('Dokument löschen?'),
+        content: Text('„${doc.title}“ wird endgültig gelöscht.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Löschen'),
           ),
         ],
       ),
@@ -167,13 +167,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.lock_outline),
-        title: const Text('Under retention'),
+        title: const Text('Aufbewahrungspflicht'),
         content: Text(
-          'This document is in compliance mode'
-          '${doc.retentionUntil != null ? ' until ${formatDate(doc.retentionUntil)}' : ''} '
-          'and cannot be deleted or have its file replaced.\n\n'
-          'You can still upload a new version, edit metadata, or archive it '
-          'to get it out of the default lists.',
+          'Dieses Dokument unterliegt der Aufbewahrungspflicht'
+          '${doc.retentionUntil != null ? ' bis ${formatDate(doc.retentionUntil)}' : ''} '
+          'und kann weder gelöscht noch seine Datei ersetzt werden.\n\n'
+          'Sie können weiterhin eine neue Version hochladen, Metadaten '
+          'bearbeiten oder es archivieren, damit es aus den Standardlisten '
+          'verschwindet.',
         ),
         actions: [
           TextButton(
@@ -186,7 +187,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
                 Navigator.pop(context);
                 _toggleArchive();
               },
-              child: const Text('Archive instead'),
+              child: const Text('Stattdessen archivieren'),
             ),
         ],
       ),
@@ -211,13 +212,13 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       await file.writeAsBytes(bytes);
       final opened = await openExternally(file.path);
       if (mounted && !opened) {
-        showSnack(context, 'Saved to ${file.path}');
+        showSnack(context, 'Gespeichert unter ${file.path}');
       }
     } on ApiException catch (e) {
       if (e.isForbidden) _recordDenied('download');
       if (mounted) showSnack(context, e.detail);
     } catch (e) {
-      if (mounted) showSnack(context, 'Download failed: $e');
+      if (mounted) showSnack(context, 'Download fehlgeschlagen: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -233,8 +234,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         showSnack(
           context,
           on
-              ? 'Watching — you will be notified about changes.'
-              : 'No longer watching this document.',
+              ? 'Wird beobachtet — Sie werden über Änderungen informiert.'
+              : 'Dokument wird nicht mehr beobachtet.',
         );
       }
     } on ApiException catch (e) {
@@ -285,8 +286,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         showSnack(
           context,
           v.isPending
-              ? 'Version ${v.number} uploaded — awaiting release.'
-              : 'New version uploaded.',
+              ? 'Version ${v.number} hochgeladen — wartet auf Freigabe.'
+              : 'Neue Version hochgeladen.',
         );
       }
       await _load();
@@ -310,12 +311,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.copy_all_outlined),
-        title: const Text('Identical file already exists'),
+        title: const Text('Identische Datei existiert bereits'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('The same bytes are already stored in:'),
+            const Text('Genau dieselbe Datei ist bereits gespeichert in:'),
             const SizedBox(height: 8),
             for (final uuid in e.duplicateOf)
               TextButton.icon(
@@ -338,14 +339,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton.tonal(
             onPressed: () {
               Navigator.pop(context);
               _uploadNewVersion(file: sent.clone(), force: true);
             },
-            child: const Text('Upload anyway'),
+            child: const Text('Trotzdem hochladen'),
           ),
         ],
       ),
@@ -361,21 +362,22 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Hide version ${v.number}?'),
+        title: Text('Version ${v.number} ausblenden?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'The version stays stored but is struck through in the '
-              'timeline and no longer counts as "the document".',
+              'Die Version bleibt gespeichert, wird im Verlauf aber '
+              'durchgestrichen dargestellt und gilt nicht mehr als '
+              '„das Dokument“.',
             ),
             const SizedBox(height: 12),
             TextField(
               controller: reasonCtrl,
               decoration: const InputDecoration(
-                labelText: 'Reason',
-                hintText: 'e.g. wrong upload',
+                labelText: 'Grund',
+                hintText: 'z. B. falscher Upload',
                 border: OutlineInputBorder(),
               ),
               autofocus: true,
@@ -385,11 +387,11 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Hide version'),
+            child: const Text('Version ausblenden'),
           ),
         ],
       ),
@@ -407,7 +409,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           );
       await _load();
     } on ApiException catch (e) {
-      // e.g. "cannot hide the only visible version"
+      // z. B. "cannot hide the only visible version"
       if (mounted) showSnack(context, e.detail);
     }
   }
@@ -426,7 +428,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     setState(() => _busy = true);
     try {
       await ref.read(apiProvider).releaseVersion(_doc!.uuid, v.number);
-      if (mounted) showSnack(context, 'Version ${v.number} released.');
+      if (mounted) showSnack(context, 'Version ${v.number} freigegeben.');
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -437,7 +439,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         setState(() => _fourEyesBlocked.add(v.number));
         showSnack(
           context,
-          'Four-eyes approval: another user must release your own upload.',
+          'Vier-Augen-Prinzip: Ihren eigenen Upload muss eine andere '
+          'Person freigeben.',
         );
       } else {
         if (e.isForbidden) _recordDenied('release_version');
@@ -451,7 +454,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   Future<void> _reExtract(DocumentVersion v) async {
     try {
       await ref.read(apiProvider).reExtract(_doc!.uuid, v.number);
-      if (mounted) showSnack(context, 'Re-extraction queued.');
+      if (mounted) showSnack(context, 'Texterkennung erneut eingeplant.');
       await _load(); // status back to pending → polling resumes
     } on ApiException catch (e) {
       if (mounted) showSnack(context, e.detail);
@@ -505,21 +508,22 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete comment?'),
+        title: const Text('Kommentar löschen?'),
         content: const Text(
-          'The comment disappears for everyone. This cannot be undone.',
+          'Der Kommentar verschwindet für alle. Das lässt sich nicht '
+          'rückgängig machen.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Löschen'),
           ),
         ],
       ),
@@ -550,12 +554,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Change document type'),
+        title: const Text('Dokumenttyp ändern'),
         content: StatefulBuilder(
           builder: (context, setState) => DropdownButtonFormField<String>(
             initialValue: selected,
             decoration: const InputDecoration(
-              labelText: 'New type',
+              labelText: 'Neuer Typ',
               border: OutlineInputBorder(),
             ),
             items: [
@@ -573,11 +577,11 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Change type'),
+            child: const Text('Typ ändern'),
           ),
         ],
       ),
@@ -585,7 +589,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     if (confirmed != true || selected == null || !mounted) return;
     try {
       await ref.read(apiProvider).changeType(doc.uuid, selected!);
-      if (mounted) showSnack(context, 'Type changed.');
+      if (mounted) showSnack(context, 'Typ geändert.');
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -594,7 +598,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       } else if (e.isInvalidMetadata) {
         showSnack(
           context,
-          '${e.detail} — adjust the metadata first, then change the type.',
+          '${e.detail} — bitte zuerst die Metadaten anpassen, dann den Typ '
+          'ändern.',
         );
       } else {
         if (e.isForbidden) _recordDenied('edit_metadata');
@@ -611,14 +616,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       if (mounted) {
         showSnack(
           context,
-          'Opened ${v.originalFilename} — watching for changes.',
+          '${v.originalFilename} geöffnet — Änderungen werden überwacht.',
         );
       }
     } on ApiException catch (e) {
       if (e.isForbidden) _recordDenied('download');
       if (mounted) showSnack(context, e.detail);
     } catch (e) {
-      if (mounted) showSnack(context, 'Could not open the file: $e');
+      if (mounted) showSnack(context, 'Datei konnte nicht geöffnet werden: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -629,20 +634,20 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       await ref
           .read(editSessionsProvider.notifier)
           .uploadAsNewVersion(_doc!.uuid);
-      if (mounted) showSnack(context, 'Uploaded as new version.');
+      if (mounted) showSnack(context, 'Als neue Version hochgeladen.');
       await _load();
     } on ApiException catch (e) {
       if (e.isForbidden) _recordDenied('upload_version');
       if (mounted) showSnack(context, e.detail);
     } catch (e) {
-      if (mounted) showSnack(context, 'Upload failed: $e');
+      if (mounted) showSnack(context, 'Upload fehlgeschlagen: $e');
     }
   }
 
   Future<void> _editReplaceFile() async {
     try {
       await ref.read(editSessionsProvider.notifier).replaceFile(_doc!.uuid);
-      if (mounted) showSnack(context, 'File replaced.');
+      if (mounted) showSnack(context, 'Datei ersetzt.');
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -653,7 +658,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         showSnack(context, e.detail);
       }
     } catch (e) {
-      if (mounted) showSnack(context, 'Upload failed: $e');
+      if (mounted) showSnack(context, 'Upload fehlgeschlagen: $e');
     }
   }
 
@@ -672,23 +677,24 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Replace file of version ${v.number}?'),
+        title: Text('Datei der Version ${v.number} ersetzen?'),
         content: Text(
-          'The stored bytes will be overwritten in place. To keep history, '
-          'upload a new version instead.'
-          '${approvalGated && !v.isPending ? '\n\nThis type requires release '
-              'approval: the replaced version drops back to "awaiting '
-              'release", and the document reverts to the previous released '
-              'content until it is released again.' : ''}',
+          'Die gespeicherte Datei wird an Ort und Stelle überschrieben. '
+          'Um den Verlauf zu erhalten, laden Sie stattdessen eine neue '
+          'Version hoch.'
+          '${approvalGated && !v.isPending ? '\n\nDieser Typ erfordert eine '
+              'Freigabe: Die ersetzte Version fällt zurück auf „wartet auf '
+              'Freigabe“, und das Dokument zeigt bis zur erneuten Freigabe '
+              'wieder den zuvor freigegebenen Inhalt.' : ''}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Replace'),
+            child: const Text('Ersetzen'),
           ),
         ],
       ),
@@ -703,9 +709,10 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         showSnack(
           context,
           replaced.isPending
-              ? 'File replaced — version ${replaced.number} awaits release; '
-                  'the document shows the previous released content until then.'
-              : 'File replaced.',
+              ? 'Datei ersetzt — Version ${replaced.number} wartet auf '
+                  'Freigabe; bis dahin zeigt das Dokument den zuvor '
+                  'freigegebenen Inhalt.'
+              : 'Datei ersetzt.',
         );
       }
       await _load();
@@ -823,12 +830,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Timeline',
+                  'Verlauf',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
                 if (_events == null)
-                  const Text('Timeline not available.')
+                  const Text('Verlauf nicht verfügbar.')
                 else
                   DocumentTimeline(events: _events!),
               ],
@@ -873,7 +880,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: watching ? 'Stop watching' : 'Watch for changes',
+            tooltip: watching ? 'Nicht mehr beobachten' : 'Änderungen beobachten',
             icon: Icon(
               watching
                   ? Icons.notifications_active
@@ -883,25 +890,25 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           ),
           if (canEdit)
             IconButton(
-              tooltip: 'Edit metadata',
+              tooltip: 'Metadaten bearbeiten',
               icon: const Icon(Icons.edit_outlined),
               onPressed: _busy ? null : _editDocument,
             ),
           if (current != null)
             IconButton(
-              tooltip: 'Download & open',
+              tooltip: 'Herunterladen & öffnen',
               icon: const Icon(Icons.open_in_new),
               onPressed: _busy ? null : () => _downloadAndOpen(current),
             ),
           if (current != null && canDownloadAsPdf(current.mimeType))
             IconButton(
-              tooltip: 'Download as PDF',
+              tooltip: 'Als PDF herunterladen',
               icon: const Icon(Icons.picture_as_pdf_outlined),
               onPressed:
                   _busy ? null : () => _downloadAndOpen(current, asPdf: true),
             ),
           IconButton(
-            tooltip: doc.archived ? 'Unarchive' : 'Archive',
+            tooltip: doc.archived ? 'Dearchivieren' : 'Archivieren',
             icon: Icon(
               doc.archived
                   ? Icons.unarchive_outlined
@@ -913,12 +920,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           // button; the lock badge explains why.
           if (!doc.inComplianceMode)
             IconButton(
-              tooltip: 'Delete',
+              tooltip: 'Löschen',
               icon: const Icon(Icons.delete_outline),
               onPressed: _busy ? null : _delete,
             ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'Aktualisieren',
             icon: const Icon(Icons.refresh),
             onPressed: _load,
           ),
@@ -934,7 +941,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.swap_horiz),
-                    title: Text('Change type'),
+                    title: Text('Typ ändern'),
                   ),
                 ),
               ],
@@ -1045,7 +1052,7 @@ class _MetadataCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'processing…',
+                        'wird verarbeitet…',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -1055,13 +1062,13 @@ class _MetadataCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            textRow('Type', typeName),
-            textRow('Document date', formatDate(doc.documentDate)),
-            textRow('Added', formatDateTime(doc.dateAdded)),
-            textRow('Added by', doc.addedBy),
+            textRow('Typ', typeName),
+            textRow('Dokumentdatum', formatDate(doc.documentDate)),
+            textRow('Hinzugefügt', formatDateTime(doc.dateAdded)),
+            textRow('Hinzugefügt von', doc.addedBy),
             if (doc.retentionUntil != null)
-              textRow('Retention until', formatDate(doc.retentionUntil)),
-            if (doc.notes?.isNotEmpty ?? false) textRow('Notes', doc.notes!),
+              textRow('Aufbewahrung bis', formatDate(doc.retentionUntil)),
+            if (doc.notes?.isNotEmpty ?? false) textRow('Notizen', doc.notes!),
             if (doc.metadata.isNotEmpty) ...[
               const Divider(height: 20),
               for (final e in doc.metadata.entries)
@@ -1082,7 +1089,7 @@ class _MetadataCard extends StatelessWidget {
       case FieldType.date:
         return formatDate('$value');
       case FieldType.boolean:
-        return value == true ? 'Yes' : 'No';
+        return value == true ? 'Ja' : 'Nein';
       case FieldType.monetary:
         return '$value'; // decimal string from the server, shown verbatim
       default:
@@ -1168,15 +1175,15 @@ class _CommentsCardState extends State<_CommentsCard> {
           children: [
             Text(
               comments == null || comments.isEmpty
-                  ? 'Comments'
-                  : 'Comments (${comments.length})',
+                  ? 'Kommentare'
+                  : 'Kommentare (${comments.length})',
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             if (comments == null)
-              Text('Comments not available.', style: muted)
+              Text('Kommentare nicht verfügbar.', style: muted)
             else if (comments.isEmpty)
-              Text('No comments yet.', style: muted)
+              Text('Noch keine Kommentare.', style: muted)
             else
               // Server order: oldest first, new ones append at the bottom.
               for (final c in comments)
@@ -1187,7 +1194,7 @@ class _CommentsCardState extends State<_CommentsCard> {
             if (widget.canCompose) _composer() else ...[
               const SizedBox(height: 4),
               Text(
-                'You are not allowed to comment on this document type.',
+                'Sie dürfen bei diesem Dokumenttyp nicht kommentieren.',
                 style: muted?.copyWith(fontStyle: FontStyle.italic),
               ),
             ],
@@ -1223,8 +1230,8 @@ class _CommentsCardState extends State<_CommentsCard> {
                   if (c.isEdited)
                     TextSpan(
                       text: c.editedBy != null && c.editedBy != c.author
-                          ? ' · edited by ${c.editedBy}'
-                          : ' · edited',
+                          ? ' · bearbeitet von ${c.editedBy}'
+                          : ' · bearbeitet',
                       style: muted?.copyWith(fontStyle: FontStyle.italic),
                     ),
                 ]),
@@ -1234,7 +1241,7 @@ class _CommentsCardState extends State<_CommentsCard> {
             ),
             if (c.canEdit)
               IconButton(
-                tooltip: 'Edit comment',
+                tooltip: 'Kommentar bearbeiten',
                 icon: const Icon(Icons.edit_outlined, size: 16),
                 visualDensity: VisualDensity.compact,
                 onPressed: _sending
@@ -1246,7 +1253,7 @@ class _CommentsCardState extends State<_CommentsCard> {
               ),
             if (c.canDelete)
               IconButton(
-                tooltip: 'Delete comment',
+                tooltip: 'Kommentar löschen',
                 icon: const Icon(Icons.delete_outline, size: 16),
                 visualDensity: VisualDensity.compact,
                 onPressed: _sending ? null : () => widget.onDelete(c),
@@ -1286,12 +1293,12 @@ class _CommentsCardState extends State<_CommentsCard> {
             TextButton(
               onPressed:
                   _sending ? null : () => setState(() => _editingId = null),
-              child: const Text('Cancel'),
+              child: const Text('Abbrechen'),
             ),
             const SizedBox(width: 8),
             FilledButton.tonal(
               onPressed: _sending ? null : () => _saveEdit(c),
-              child: const Text('Save'),
+              child: const Text('Speichern'),
             ),
           ],
         ),
@@ -1311,7 +1318,7 @@ class _CommentsCardState extends State<_CommentsCard> {
               queryMentions: widget.queryMentions,
               enabled: !_sending,
               decoration: const InputDecoration(
-                hintText: 'Add a comment…  (@ mentions someone)',
+                hintText: 'Kommentar hinzufügen…  (@ erwähnt jemanden)',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -1319,7 +1326,7 @@ class _CommentsCardState extends State<_CommentsCard> {
           ),
           const SizedBox(width: 8),
           IconButton.filledTonal(
-            tooltip: 'Post comment',
+            tooltip: 'Kommentar senden',
             icon: _sending
                 ? const SizedBox(
                     width: 16,
@@ -1478,7 +1485,8 @@ class _MentionFieldState extends State<_MentionField> {
                       subtitle: u.canView
                           ? null
                           : Text(
-                              'Cannot view this document — will not be notified',
+                              'Kein Zugriff auf dieses Dokument — wird nicht '
+                              'benachrichtigt',
                               style: theme.textTheme.labelSmall,
                             ),
                       onTap: () => _insert(u),
@@ -1555,16 +1563,16 @@ class _EditSessionBanner extends StatelessWidget {
                 Expanded(
                   child: Text(
                     uploading
-                        ? 'Uploading ${session.fileName}…'
+                        ? '${session.fileName} wird hochgeladen…'
                         : changed
-                        ? '${session.fileName} changed on disk'
-                        : 'Editing v${session.versionNumber} — watching '
-                              '${session.fileName} for changes',
+                        ? '${session.fileName} wurde auf der Festplatte geändert'
+                        : 'v${session.versionNumber} in Bearbeitung — '
+                              '${session.fileName} wird überwacht',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Stop watching',
+                  tooltip: 'Überwachung beenden',
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: uploading ? null : onStop,
                 ),
@@ -1574,14 +1582,16 @@ class _EditSessionBanner extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 (session.compliance
-                        ? 'This document is under retention: the change can only '
-                              'be uploaded as version ${session.versionNumber + 1}.'
-                        : 'Upload the change as version '
-                              '${session.versionNumber + 1}, or overwrite the file '
-                              'of version ${session.versionNumber} in place.') +
+                        ? 'Dieses Dokument unterliegt der Aufbewahrungspflicht: '
+                              'Die Änderung kann nur als Version '
+                              '${session.versionNumber + 1} hochgeladen werden.'
+                        : 'Änderung als Version '
+                              '${session.versionNumber + 1} hochladen oder die '
+                              'Datei der Version ${session.versionNumber} direkt '
+                              'überschreiben.') +
                     (approvalGated
-                        ? ' This type requires release approval — the result '
-                              'awaits release before it becomes the document.'
+                        ? ' Dieser Typ erfordert eine Freigabe — das Ergebnis '
+                              'wartet auf Freigabe, bevor es zum Dokument wird.'
                         : ''),
                 style: theme.textTheme.bodySmall,
               ),
@@ -1593,13 +1603,13 @@ class _EditSessionBanner extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: canUpload ? onUploadNewVersion : null,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: Text('Upload as v${session.versionNumber + 1}'),
+                    label: Text('Als v${session.versionNumber + 1} hochladen'),
                   ),
                   if (!session.compliance)
                     OutlinedButton.icon(
                       onPressed: canUpload ? onReplaceFile : null,
                       icon: const Icon(Icons.find_replace, size: 18),
-                      label: Text('Replace file in v${session.versionNumber}'),
+                      label: Text('Datei in v${session.versionNumber} ersetzen'),
                     ),
                 ],
               ),
@@ -1654,8 +1664,9 @@ class _PendingReleaseBanner extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Version ${version.number} awaiting release — uploaded by '
-                    '${version.uploadedBy} · ${formatDateTime(version.uploadedAt)}',
+                    'Version ${version.number} wartet auf Freigabe — '
+                    'hochgeladen von ${version.uploadedBy} · '
+                    '${formatDateTime(version.uploadedAt)}',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -1664,10 +1675,12 @@ class _PendingReleaseBanner extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               noReleasedContent
-                  ? 'No released version exists right now — the document has '
-                      'no effective content until this version is released.'
-                  : 'The document still shows the previous released content. '
-                      'Review the proposed changes in the timeline below.',
+                  ? 'Derzeit existiert keine freigegebene Version — das '
+                      'Dokument hat keinen wirksamen Inhalt, bis diese Version '
+                      'freigegeben wird.'
+                  : 'Das Dokument zeigt weiterhin den zuvor freigegebenen '
+                      'Inhalt. Die vorgeschlagenen Änderungen finden Sie im '
+                      'Verlauf weiter unten.',
               style: theme.textTheme.bodySmall,
             ),
             if (canRelease) ...[
@@ -1677,13 +1690,14 @@ class _PendingReleaseBanner extends StatelessWidget {
                   FilledButton.tonalIcon(
                     onPressed: fourEyesBlocked ? null : onRelease,
                     icon: const Icon(Icons.task_alt, size: 18),
-                    label: Text('Release v${version.number}'),
+                    label: Text('v${version.number} freigeben'),
                   ),
                   if (fourEyesBlocked)
                     Padding(
                       padding: const EdgeInsets.only(left: 10),
                       child: Text(
-                        'Four-eyes: another user must release this.',
+                        'Vier-Augen-Prinzip: Eine andere Person muss '
+                        'freigeben.',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: scheme.onSurfaceVariant),
                       ),
@@ -1742,13 +1756,13 @@ class _VersionsCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('Versions', style: theme.textTheme.titleMedium),
+                  child: Text('Versionen', style: theme.textTheme.titleMedium),
                 ),
                 if (onUploadVersion != null)
                   FilledButton.tonalIcon(
                     onPressed: onUploadVersion,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('New version'),
+                    label: const Text('Neue Version'),
                   ),
               ],
             ),
@@ -1788,14 +1802,14 @@ class _VersionsCard extends StatelessWidget {
                 ),
                 subtitle: Text(
                   v.isHidden
-                      ? 'Hidden${v.hiddenBy != null ? ' by ${v.hiddenBy}' : ''}'
+                      ? 'Ausgeblendet${v.hiddenBy != null ? ' von ${v.hiddenBy}' : ''}'
                             '${(v.hiddenReason?.isNotEmpty ?? false) ? ': ${v.hiddenReason}' : ''}'
                       : '${formatBytes(v.size)} · ${v.uploadedBy}'
                             ' · ${formatDateTime(v.uploadedAt)}'
                             // Explicit releases only — auto-released versions
                             // carry no released_by (§5).
-                            '${v.releasedBy != null ? ' · released by ${v.releasedBy}' : ''}'
-                            '${v.extractionStatus == ExtractionStatus.failed ? ' · OCR failed' : ''}',
+                            '${v.releasedBy != null ? ' · freigegeben von ${v.releasedBy}' : ''}'
+                            '${v.extractionStatus == ExtractionStatus.failed ? ' · Texterkennung fehlgeschlagen' : ''}',
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Row(
@@ -1804,8 +1818,9 @@ class _VersionsCard extends StatelessWidget {
                     if (!v.isHidden && v.isPending && onRelease != null)
                       IconButton(
                         tooltip: fourEyesBlocked.contains(v.number)
-                            ? 'Four-eyes: another user must release this'
-                            : 'Release this version',
+                            ? 'Vier-Augen-Prinzip: Eine andere Person muss '
+                                'freigeben'
+                            : 'Diese Version freigeben',
                         icon: const Icon(Icons.task_alt, size: 20),
                         onPressed: fourEyesBlocked.contains(v.number)
                             ? null
@@ -1814,18 +1829,18 @@ class _VersionsCard extends StatelessWidget {
                     if (!v.isHidden) ...[
                       if (onOpenEdit != null)
                         IconButton(
-                          tooltip: 'Open & edit (watch for changes)',
+                          tooltip: 'Öffnen & bearbeiten (Änderungen überwachen)',
                           icon: const Icon(Icons.edit_document, size: 20),
                           onPressed: () => onOpenEdit!(v),
                         ),
                       if (onReplaceFile != null)
                         IconButton(
-                          tooltip: 'Replace file in place',
+                          tooltip: 'Datei direkt ersetzen',
                           icon: const Icon(Icons.find_replace, size: 20),
                           onPressed: () => onReplaceFile!(v),
                         ),
                       IconButton(
-                        tooltip: 'Download & open',
+                        tooltip: 'Herunterladen & öffnen',
                         icon: const Icon(Icons.file_download_outlined),
                         onPressed: onDownload != null
                             ? () => onDownload!(v)
@@ -1833,7 +1848,7 @@ class _VersionsCard extends StatelessWidget {
                       ),
                       if (canDownloadAsPdf(v.mimeType))
                         IconButton(
-                          tooltip: 'Download as PDF',
+                          tooltip: 'Als PDF herunterladen',
                           icon: const Icon(Icons.picture_as_pdf_outlined),
                           onPressed: onDownloadPdf != null
                               ? () => onDownloadPdf!(v)
@@ -1863,7 +1878,7 @@ class _VersionsCard extends StatelessWidget {
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 leading: Icon(Icons.visibility_outlined),
-                                title: Text('Unhide'),
+                                title: Text('Einblenden'),
                               ),
                             )
                           else ...[
@@ -1874,7 +1889,7 @@ class _VersionsCard extends StatelessWidget {
                                   dense: true,
                                   contentPadding: EdgeInsets.zero,
                                   leading: Icon(Icons.visibility_off_outlined),
-                                  title: Text('Hide (wrong upload)…'),
+                                  title: Text('Ausblenden (falscher Upload)…'),
                                 ),
                               ),
                             if (onReExtract != null)
@@ -1884,7 +1899,7 @@ class _VersionsCard extends StatelessWidget {
                                   dense: true,
                                   contentPadding: EdgeInsets.zero,
                                   leading: Icon(Icons.refresh),
-                                  title: Text('Re-run text extraction'),
+                                  title: Text('Texterkennung erneut ausführen'),
                                 ),
                               ),
                           ],
@@ -1895,7 +1910,7 @@ class _VersionsCard extends StatelessWidget {
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 leading: Icon(Icons.open_in_new),
-                                title: Text('Open in console'),
+                                title: Text('In der Konsole öffnen'),
                               ),
                             ),
                         ],
@@ -2085,7 +2100,8 @@ class _PreviewPagerState extends State<_PreviewPager> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'No preview for this format.\nUse "Download & open".',
+                          'Keine Vorschau für dieses Format.\n'
+                          'Bitte „Herunterladen & öffnen“ verwenden.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: scheme.onSurfaceVariant),
                         ),

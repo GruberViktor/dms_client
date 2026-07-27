@@ -121,7 +121,7 @@ class ErrorRetry extends StatelessWidget {
             const SizedBox(height: 12),
             Text(msg, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton.tonal(onPressed: onRetry, child: const Text('Retry')),
+            FilledButton.tonal(onPressed: onRetry, child: const Text('Erneut versuchen')),
           ],
         ),
       ),
@@ -144,8 +144,8 @@ class ComplianceBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: retentionUntil != null
-          ? 'Under retention until ${formatDate(retentionUntil)}'
-          : 'Under retention',
+          ? 'Aufbewahrungspflicht bis ${formatDate(retentionUntil)}'
+          : 'Aufbewahrungspflicht',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
@@ -159,8 +159,8 @@ class ComplianceBadge extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               retentionUntil != null
-                  ? 'Retention · ${formatDate(retentionUntil)}'
-                  : 'Retention',
+                  ? 'Aufbewahrung · ${formatDate(retentionUntil)}'
+                  : 'Aufbewahrung',
               style: Theme.of(context)
                   .textTheme
                   .labelSmall

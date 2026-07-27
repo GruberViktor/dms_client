@@ -122,21 +122,21 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete type "${widget.existing!.name}"?'),
+        title: Text('Typ „${widget.existing!.name}“ löschen?'),
         content: const Text(
-            'This fails if documents of this type exist. Consider marking '
-            'the type inactive instead.'),
+            'Das schlägt fehl, solange Dokumente dieses Typs existieren. '
+            'Setzen Sie den Typ stattdessen besser auf inaktiv.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const Text('Löschen'),
           ),
         ],
       ),
@@ -189,7 +189,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
           .read(apiProvider)
           .putAcls(widget.existing!.slug, _aclEntries ?? const []);
       _changed = true;
-      if (mounted) showSnack(context, 'Permissions saved.');
+      if (mounted) showSnack(context, 'Berechtigungen gespeichert.');
       _reloadAcls();
     } on ApiException catch (e) {
       if (mounted) showSnack(context, e.detail);
@@ -201,13 +201,13 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
     final groupId = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add group'),
+        title: const Text('Gruppe hinzufügen'),
         content: TextField(
           controller: ctrl,
           decoration: const InputDecoration(
-            labelText: 'Group ID',
-            helperText: 'Numeric Django group id — there is no group '
-                'listing API yet (server-side gap, spec §10).',
+            labelText: 'Gruppen-ID',
+            helperText: 'Numerische Django-Gruppen-ID — es gibt noch keine '
+                'API zum Auflisten von Gruppen (serverseitige Lücke, §10).',
             border: OutlineInputBorder(),
           ),
           keyboardType: TextInputType.number,
@@ -216,12 +216,12 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Abbrechen'),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.pop(context, int.tryParse(ctrl.text.trim())),
-            child: const Text('Add'),
+            child: const Text('Hinzufügen'),
           ),
         ],
       ),
@@ -237,9 +237,9 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
   }
 
   static String _modeLabel(String mode) => switch (mode) {
-        'none' => 'None (versions active immediately)',
-        'required' => 'Release required',
-        'four_eyes' => 'Four eyes (uploader may not release)',
+        'none' => 'Keine (Versionen sofort aktiv)',
+        'required' => 'Freigabe erforderlich',
+        'four_eyes' => 'Vier Augen (Hochladende dürfen nicht freigeben)',
         _ => mode,
       };
 
@@ -269,17 +269,17 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(isNew ? 'New document type' : widget.existing!.name),
+          title: Text(isNew ? 'Neuer Dokumenttyp' : widget.existing!.name),
           actions: [
             if (!isNew)
               IconButton(
-                tooltip: 'Delete type',
+                tooltip: 'Typ löschen',
                 icon: const Icon(Icons.delete_outline),
                 onPressed: _busy ? null : _delete,
               ),
             TextButton(
               onPressed: _busy ? null : _save,
-              child: const Text('Save'),
+              child: const Text('Speichern'),
             ),
             const SizedBox(width: 8),
           ],
@@ -299,7 +299,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
                     enabled: !_busy,
                   ),
                   const SizedBox(height: 12),
@@ -311,9 +311,9 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     ),
                     validator: (v) {
                       final t = (v ?? '').trim();
-                      if (t.isEmpty) return 'Required';
+                      if (t.isEmpty) return 'Pflichtfeld';
                       if (!RegExp(r'^[-a-zA-Z0-9_]+$').hasMatch(t)) {
-                        return 'Only letters, digits, - and _';
+                        return 'Nur Buchstaben, Ziffern, - und _';
                       }
                       return null;
                     },
@@ -323,12 +323,12 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                   DropdownButtonFormField<String?>(
                     initialValue: selectedParent,
                     decoration: const InputDecoration(
-                      labelText: 'Parent type',
+                      labelText: 'Übergeordneter Typ',
                       border: OutlineInputBorder(),
                     ),
                     items: [
                       const DropdownMenuItem<String?>(
-                          value: null, child: Text('— root —')),
+                          value: null, child: Text('— oberste Ebene —')),
                       for (final t in parentOptions)
                         DropdownMenuItem<String?>(
                           value: t.slug,
@@ -343,15 +343,16 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                   DropdownButtonFormField<int?>(
                     initialValue: selectedPolicy,
                     decoration: const InputDecoration(
-                      labelText: 'Retention policy',
+                      labelText: 'Aufbewahrungsregel',
                       helperText:
-                          'Inherited by descendants; compliance policies '
-                          'lock delete/replace on their documents',
+                          'Wird an Untertypen vererbt; Regeln mit '
+                          'Aufbewahrungspflicht sperren Löschen/Ersetzen '
+                          'ihrer Dokumente',
                       border: OutlineInputBorder(),
                     ),
                     items: [
                       const DropdownMenuItem<int?>(
-                          value: null, child: Text('— inherit / none —')),
+                          value: null, child: Text('— erben / keine —')),
                       for (final p in _policies)
                         DropdownMenuItem<int?>(
                           value: p.id,
@@ -367,22 +368,22 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                   DropdownButtonFormField<String?>(
                     initialValue: _approvalMode,
                     decoration: InputDecoration(
-                      labelText: 'Version approval',
+                      labelText: 'Versionsfreigabe',
                       // The server has no effective-mode endpoint — resolve
                       // the inherited value by walking the parent chain
                       // (approvals hand-off §2).
                       helperText: _approvalMode == null
-                          ? 'Inherited: '
+                          ? 'Geerbt: '
                               '${_modeLabel(effectiveApprovalMode({
                                 for (final t in types) t.slug: t,
                               }, _parentSlug))}'
-                          : 'New uploads of this subtree '
-                              '${_approvalMode == 'none' ? 'become active immediately' : 'await release first'}',
+                          : 'Neue Uploads in diesem Teilbaum '
+                              '${_approvalMode == 'none' ? 'werden sofort aktiv' : 'warten zuerst auf Freigabe'}',
                       border: const OutlineInputBorder(),
                     ),
                     items: [
                       const DropdownMenuItem<String?>(
-                          value: null, child: Text('— inherit —')),
+                          value: null, child: Text('— erben —')),
                       for (final m in const ['none', 'required', 'four_eyes'])
                         DropdownMenuItem<String?>(
                             value: m, child: Text(_modeLabel(m))),
@@ -393,9 +394,9 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Active'),
-                    subtitle:
-                        const Text('Inactive types are hidden on upload'),
+                    title: const Text('Aktiv'),
+                    subtitle: const Text(
+                        'Inaktive Typen werden beim Hochladen ausgeblendet'),
                     value: _isActive,
                     onChanged:
                         _busy ? null : (v) => setState(() => _isActive = v),
@@ -406,19 +407,20 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text('Own metadata fields',
+                          child: Text('Eigene Metadatenfelder',
                               style:
                                   Theme.of(context).textTheme.titleMedium),
                         ),
                         TextButton.icon(
                           onPressed: () => _editField(),
                           icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Add field'),
+                          label: const Text('Feld hinzufügen'),
                         ),
                       ],
                     ),
                     Text(
-                      'Descendant types inherit these; child keys override.',
+                      'Untertypen erben diese; Schlüssel im Untertyp haben '
+                      'Vorrang.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 8),
@@ -431,7 +433,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     else if (_ownFields!.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Text('No own fields.'),
+                        child: Text('Keine eigenen Felder.'),
                       )
                     else
                       for (final f in _ownFields!)
@@ -441,8 +443,8 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                           leading: const Icon(Icons.short_text),
                           title: Text('${f.label}  ·  ${f.key}'),
                           subtitle: Text(
-                              '${f.fieldType.name}${f.required ? ' · required' : ''}'
-                              '${f.indexed ? ' · indexed' : ''}'),
+                              '${f.fieldType.label}${f.required ? ' · Pflicht' : ''}'
+                              '${f.indexed ? ' · indiziert' : ''}'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -464,7 +466,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text('Permissions (ACL)',
+                          child: Text('Berechtigungen (ACL)',
                               style:
                                   Theme.of(context).textTheme.titleMedium),
                         ),
@@ -472,17 +474,17 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                           onPressed: _addAclGroup,
                           icon: const Icon(Icons.group_add_outlined,
                               size: 18),
-                          label: const Text('Add group'),
+                          label: const Text('Gruppe hinzufügen'),
                         ),
                       ],
                     ),
                     Text(
-                      'Per group, inherited by descendant types.',
+                      'Pro Gruppe, wird an Untertypen vererbt.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 8),
                     if (_aclError != null)
-                      Text('Could not load ACLs: $_aclError')
+                      Text('Berechtigungen konnten nicht geladen werden: $_aclError')
                     else if (_aclEntries == null)
                       const Center(
                           child: Padding(
@@ -493,7 +495,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                       if (_aclEntries!.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text('No own ACL entries.'),
+                          child: Text('Keine eigenen ACL-Einträge.'),
                         ),
                       for (final entry in _aclEntries!)
                         Card(
@@ -509,14 +511,14 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                                       child: Text(
                                         entry.groupName != null
                                             ? '${entry.groupName} (id ${entry.group})'
-                                            : 'Group ${entry.group}',
+                                            : 'Gruppe ${entry.group}',
                                         style: Theme.of(context)
                                             .textTheme
                                             .titleSmall,
                                       ),
                                     ),
                                     IconButton(
-                                      tooltip: 'Remove group',
+                                      tooltip: 'Gruppe entfernen',
                                       icon: const Icon(Icons.close,
                                           size: 18),
                                       onPressed: () => setState(() =>
@@ -530,7 +532,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                                   children: [
                                     for (final perm in aclPermissions)
                                       FilterChip(
-                                        label: Text(perm),
+                                        label: Text(aclPermissionLabel(perm)),
                                         visualDensity:
                                             VisualDensity.compact,
                                         selected: entry.permissions
@@ -552,7 +554,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                         alignment: Alignment.centerRight,
                         child: FilledButton.tonal(
                           onPressed: _saveAcls,
-                          child: const Text('Save permissions'),
+                          child: const Text('Berechtigungen speichern'),
                         ),
                       ),
                     ],
@@ -639,7 +641,7 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.existing != null ? 'Edit field' : 'New field'),
+      title: Text(widget.existing != null ? 'Feld bearbeiten' : 'Neues Feld'),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -648,8 +650,8 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
             TextField(
               controller: _keyCtrl,
               decoration: const InputDecoration(
-                labelText: 'Key *',
-                helperText: 'Wire name, e.g. invoice_number',
+                labelText: 'Schlüssel *',
+                helperText: 'Name auf der Schnittstelle, z. B. invoice_number',
                 border: OutlineInputBorder(),
               ),
               enabled: !_busy && widget.existing == null,
@@ -659,7 +661,7 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
             TextField(
               controller: _labelCtrl,
               decoration: const InputDecoration(
-                labelText: 'Label *',
+                labelText: 'Beschriftung *',
                 border: OutlineInputBorder(),
               ),
               enabled: !_busy,
@@ -668,17 +670,16 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
             DropdownButtonFormField<String>(
               initialValue: _fieldType,
               decoration: const InputDecoration(
-                labelText: 'Type',
+                labelText: 'Typ',
                 border: OutlineInputBorder(),
               ),
               items: const [
                 DropdownMenuItem(value: 'text', child: Text('Text')),
-                DropdownMenuItem(value: 'date', child: Text('Date')),
-                DropdownMenuItem(value: 'integer', child: Text('Integer')),
-                DropdownMenuItem(value: 'float', child: Text('Float')),
-                DropdownMenuItem(
-                    value: 'monetary', child: Text('Monetary')),
-                DropdownMenuItem(value: 'bool', child: Text('Boolean')),
+                DropdownMenuItem(value: 'date', child: Text('Datum')),
+                DropdownMenuItem(value: 'integer', child: Text('Ganzzahl')),
+                DropdownMenuItem(value: 'float', child: Text('Dezimalzahl')),
+                DropdownMenuItem(value: 'monetary', child: Text('Betrag')),
+                DropdownMenuItem(value: 'bool', child: Text('Ja/Nein')),
                 DropdownMenuItem(value: 'url', child: Text('URL')),
               ],
               onChanged:
@@ -686,15 +687,15 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Required'),
+              title: const Text('Pflichtfeld'),
               value: _required,
               onChanged:
                   _busy ? null : (v) => setState(() => _required = v),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Indexed'),
-              subtitle: const Text('For tree views / sorting'),
+              title: const Text('Indiziert'),
+              subtitle: const Text('Für Baumansichten / Sortierung'),
               value: _indexed,
               onChanged:
                   _busy ? null : (v) => setState(() => _indexed = v),
@@ -705,11 +706,11 @@ class _FieldDialogState extends ConsumerState<_FieldDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+          child: const Text('Abbrechen'),
         ),
         FilledButton(
           onPressed: _busy ? null : _save,
-          child: const Text('Save'),
+          child: const Text('Speichern'),
         ),
       ],
     );

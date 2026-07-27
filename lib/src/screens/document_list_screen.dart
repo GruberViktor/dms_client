@@ -197,7 +197,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       if (e.code == 'invalid_ordering' && _sort != fallback) {
         final rejected = _sort.key.label;
         setState(() => _sort = fallback);
-        showSnack(context, 'Cannot sort by “$rejected” here.');
+        showSnack(context, 'Sortierung nach „$rejected“ ist hier nicht möglich.');
         return _loadPage(page);
       }
       setState(() {
@@ -305,7 +305,9 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(content: Text('Drop one file at a time to upload.')),
+          const SnackBar(
+            content: Text('Bitte nur eine Datei auf einmal ablegen.'),
+          ),
         );
       return;
     }
@@ -338,8 +340,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         showSnack(
           context,
           on
-              ? 'Watching this category and its subtypes.'
-              : 'No longer watching this category.',
+              ? 'Kategorie samt Unterkategorien wird beobachtet.'
+              : 'Kategorie wird nicht mehr beobachtet.',
         );
       }
     } on ApiException catch (e) {
@@ -376,17 +378,17 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             leading: wide
                 ? IconButton(
                     tooltip: _sidebarExpanded
-                        ? 'Hide categories'
-                        : 'Show categories',
+                        ? 'Kategorien ausblenden'
+                        : 'Kategorien einblenden',
                     icon: Icon(_sidebarExpanded ? Icons.menu_open : Icons.menu),
                     onPressed: () =>
                         setState(() => _sidebarExpanded = !_sidebarExpanded),
                   )
                 : null,
-            title: Text(typeName ?? 'Documents'),
+            title: Text(typeName ?? 'Dokumente'),
             actions: [
               IconButton(
-                tooltip: 'Refresh',
+                tooltip: 'Aktualisieren',
                 icon: const Icon(Icons.refresh),
                 onPressed: _reload,
               ),
@@ -398,7 +400,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     }
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'logout', child: Text('Sign out')),
+                    PopupMenuItem(value: 'logout', child: Text('Abmelden')),
                   ],
                 ),
             ],
@@ -462,7 +464,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           ),
           floatingActionButton: FloatingActionButton.extended(
             icon: const Icon(Icons.upload_file),
-            label: const Text('Upload'),
+            label: const Text('Hochladen'),
             onPressed: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
@@ -563,20 +565,20 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
           children: [
             IconButton(
               icon: const Icon(Icons.first_page),
-              tooltip: 'First page',
+              tooltip: 'Erste Seite',
               visualDensity: VisualDensity.compact,
               onPressed: _page > 0 ? () => _goToPage(0) : null,
             ),
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              tooltip: 'Previous page',
+              tooltip: 'Vorherige Seite',
               visualDensity: VisualDensity.compact,
               onPressed: _page > 0 ? () => _goToPage(_page - 1) : null,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                'Page ${_page + 1} of $_pageCount',
+                'Seite ${_page + 1} von $_pageCount',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -584,7 +586,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.chevron_right),
-              tooltip: 'Next page',
+              tooltip: 'Nächste Seite',
               visualDensity: VisualDensity.compact,
               onPressed: _page < _pageCount - 1
                   ? () => _goToPage(_page + 1)
@@ -592,7 +594,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.last_page),
-              tooltip: 'Last page',
+              tooltip: 'Letzte Seite',
               visualDensity: VisualDensity.compact,
               onPressed: _page < _pageCount - 1
                   ? () => _goToPage(_pageCount - 1)
@@ -626,7 +628,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Drop file to upload',
+                  'Datei zum Hochladen ablegen',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: scheme.onPrimaryContainer,
                   ),
@@ -666,7 +668,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                   isDense: true,
                   filled: true,
                   fillColor: theme.colorScheme.surfaceContainerHighest,
-                  hintText: 'Search title, metadata, full text',
+                  hintText: 'Titel, Metadaten, Volltext durchsuchen',
                   hintStyle: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
@@ -683,7 +685,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                             icon: const Icon(Icons.close, size: 18),
                             padding: EdgeInsets.zero,
                             visualDensity: VisualDensity.compact,
-                            tooltip: 'Clear search',
+                            tooltip: 'Suche löschen',
                             onPressed: _clearQuery,
                           )
                         : const SizedBox.shrink(),
@@ -710,7 +712,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               // field text stays in sync with the filter.
               key: ValueKey(_filters.typeSlug),
               initialSelection: _filters.typeSlug,
-              hintText: 'All types',
+              hintText: 'Alle Typen',
               menuHeight: 420,
               expandedInsets: EdgeInsets.zero,
               textStyle: theme.textTheme.bodyMedium,
@@ -733,7 +735,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               dropdownMenuEntries: [
                 const DropdownMenuEntry<String?>(
                   value: null,
-                  label: 'All types',
+                  label: 'Alle Typen',
                 ),
                 for (final t in types)
                   DropdownMenuEntry<String?>(
@@ -792,24 +794,24 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
             ],
             ActionChip(
               avatar: const Icon(Icons.add, size: 18),
-              label: const Text('Metadata filter'),
+              label: const Text('Metadatenfilter'),
               onPressed: _editMetadataFilter,
             ),
             const SizedBox(width: 8),
           ],
           FilterChip(
-            label: const Text('Archived'),
+            label: const Text('Archiviert'),
             selected: _filters.archivedOnly,
             visualDensity: VisualDensity.compact,
             showCheckmark: true,
-            tooltip: 'Show only archived documents',
+            tooltip: 'Nur archivierte Dokumente anzeigen',
             onSelected: (on) =>
                 _applyFilters(_filters.copyWith(archivedOnly: on)),
           ),
           if (_filters.searching && _initialLoaded && _error == null) ...[
             const SizedBox(width: 12),
             Text(
-              _count == 1 ? '1 result' : '$_count results',
+              _count == 1 ? '1 Treffer' : '$_count Treffer',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -831,8 +833,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
       return Center(
         child: Text(
           _filters.searching
-              ? 'No documents match “${_filters.query}”.'
-              : 'No documents match the filters.',
+              ? 'Keine Dokumente passen zu „${_filters.query}“.'
+              : 'Keine Dokumente passen zu den Filtern.',
         ),
       );
     }
@@ -1001,7 +1003,7 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
   Widget build(BuildContext context) {
     final matched = _matched;
     return AlertDialog(
-      title: const Text('Filter by metadata'),
+      title: const Text('Nach Metadaten filtern'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -1017,25 +1019,25 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: const Text('Abbrechen'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Apply')),
+        FilledButton(onPressed: _submit, child: const Text('Anwenden')),
       ],
     );
   }
 
   Widget _keyField() {
     final decoration = InputDecoration(
-      labelText: 'Key',
-      hintText: widget.fields.isEmpty ? 'e.g. invoice_number' : null,
+      labelText: 'Schlüssel',
+      hintText: widget.fields.isEmpty ? 'z. B. invoice_number' : null,
       helperText: widget.fields.isEmpty
-          ? 'Select a document type to get key suggestions'
+          ? 'Dokumenttyp wählen, um Schlüssel vorgeschlagen zu bekommen'
           : null,
       suffixIcon: widget.fields.isEmpty
           ? null
           : IconButton(
               icon: const Icon(Icons.arrow_drop_down),
-              tooltip: 'Show fields',
+              tooltip: 'Felder anzeigen',
               // Re-focusing an already focused field does not reopen the
               // options list, so drop focus first.
               onPressed: () {
@@ -1094,7 +1096,7 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
                 return ListTile(
                   dense: true,
                   title: Text(f.label),
-                  subtitle: Text('${f.key} · ${f.fieldType.name}'),
+                  subtitle: Text('${f.key} · ${f.fieldType.label}'),
                   onTap: () => onSelected(f),
                 );
               },
@@ -1109,19 +1111,19 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
   /// stores in `metadata` (bool → true/false, monetary → decimal string,
   /// date → YYYY-MM-DD). Unknown keys stay free text.
   Widget _valueField(MetadataFieldDef? f) {
-    final helper = f != null ? '${f.label} · ${f.fieldType.name}' : null;
+    final helper = f != null ? '${f.label} · ${f.fieldType.label}' : null;
     switch (f?.fieldType) {
       case FieldType.boolean:
         return InputDecorator(
           decoration: InputDecoration(
-            labelText: 'Value',
+            labelText: 'Wert',
             helperText: helper,
             border: const OutlineInputBorder(),
           ),
           child: SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'true', label: Text('true')),
-              ButtonSegment(value: 'false', label: Text('false')),
+              ButtonSegment(value: 'true', label: Text('Ja')),
+              ButtonSegment(value: 'false', label: Text('Nein')),
             ],
             selected: {if (_value == 'true' || _value == 'false') _value},
             emptySelectionAllowed: true,
@@ -1136,13 +1138,13 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
           borderRadius: BorderRadius.circular(4),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'Value',
+              labelText: 'Wert',
               helperText: helper,
               suffixIcon: _value.isEmpty
                   ? const Icon(Icons.calendar_today_outlined, size: 18)
                   : IconButton(
                       icon: const Icon(Icons.clear, size: 18),
-                      tooltip: 'Clear',
+                      tooltip: 'Löschen',
                       onPressed: () => setState(() => _value = ''),
                     ),
             ),
@@ -1152,7 +1154,7 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
       case FieldType.integer:
         return _textValueField(
           helper: helper,
-          hint: 'e.g. 42',
+          hint: 'z. B. 42',
           keyboardType: const TextInputType.numberWithOptions(signed: true),
           formatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
         );
@@ -1160,7 +1162,7 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
       case FieldType.monetary:
         return _textValueField(
           helper: helper,
-          hint: 'e.g. 1234.56',
+          hint: 'z. B. 1234,56',
           keyboardType: const TextInputType.numberWithOptions(
             decimal: true,
             signed: true,
@@ -1181,7 +1183,7 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
       default:
         return _textValueField(
           helper: helper,
-          hint: f == null ? null : 'exact value',
+          hint: f == null ? null : 'exakter Wert',
         );
     }
   }
@@ -1196,7 +1198,7 @@ class _MetadataFilterDialogState extends State<_MetadataFilterDialog> {
     return TextField(
       controller: _valueCtrl,
       decoration: InputDecoration(
-        labelText: 'Value',
+        labelText: 'Wert',
         hintText: hint,
         helperText: helper,
       ),

@@ -186,7 +186,7 @@ class _DateFieldState extends State<_DateField> {
       validator: (v) {
         if (widget.serverError != null) return widget.serverError;
         if (widget.enforceRequired && widget.def.required && _iso == null) {
-          return 'Required';
+          return 'Pflichtfeld';
         }
         return null;
       },
@@ -283,18 +283,18 @@ class _TextMetadataFieldState extends State<_TextMetadataField> {
     final text = (v ?? '').trim();
     if (text.isEmpty) {
       return (widget.enforceRequired && widget.def.required)
-          ? 'Required'
+          ? 'Pflichtfeld'
           : null;
     }
     return switch (_type) {
       FieldType.integer =>
-        int.tryParse(text) == null ? 'Whole number expected' : null,
+        int.tryParse(text) == null ? 'Ganze Zahl erwartet' : null,
       FieldType.float =>
-        double.tryParse(text) == null ? 'Number expected' : null,
+        double.tryParse(text) == null ? 'Zahl erwartet' : null,
       FieldType.monetary =>
-        _tryDecimal(text) == null ? 'Amount expected, e.g. 1234.50' : null,
+        _tryDecimal(text) == null ? 'Betrag erwartet, z. B. 1234,50' : null,
       FieldType.url =>
-        Uri.tryParse(text)?.hasScheme != true ? 'URL expected' : null,
+        Uri.tryParse(text)?.hasScheme != true ? 'URL erwartet' : null,
       _ => null,
     };
   }
@@ -314,7 +314,7 @@ class _TextMetadataFieldState extends State<_TextMetadataField> {
             : null,
         suffixIcon: _type == FieldType.url
             ? IconButton(
-                tooltip: 'Open link',
+                tooltip: 'Link öffnen',
                 icon: const Icon(Icons.open_in_new, size: 18),
                 onPressed: () {
                   final uri = Uri.tryParse(_ctrl.text.trim());

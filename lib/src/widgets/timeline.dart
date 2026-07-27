@@ -6,7 +6,7 @@ import 'common.dart';
 
 /// Vertical audit/version timeline (client-specification.md §6).
 /// Version events are large anchor nodes; audit events smaller entries.
-/// view/download repeats are grouped ("viewed 5×").
+/// view/download repeats are grouped ("5× angesehen").
 class DocumentTimeline extends StatelessWidget {
   final List<TimelineEvent> events;
 
@@ -17,7 +17,7 @@ class DocumentTimeline extends StatelessWidget {
     if (events.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Text('No events.'),
+        child: Text('Keine Ereignisse.'),
       );
     }
     // comment_* audit rows duplicate what the comment node already shows —
@@ -140,23 +140,24 @@ class _AuditLine extends StatelessWidget {
 
   const _AuditLine({required this.event, required this.repeat});
 
+  /// Verb phrases, read as `<Akteur> <Label>`.
   static const _labels = {
-    'create': 'created the document',
-    'edit_metadata': 'edited metadata',
-    'edit_fields': 'edited fields',
-    'version_upload': 'uploaded a version',
-    'version_replace_file': 'replaced a version file',
-    'version_hide': 'hid a version',
-    'version_unhide': 'unhid a version',
-    'version_release': 'released a version',
-    'download': 'downloaded',
-    'view': 'viewed',
-    'archive': 'archived the document',
-    'unarchive': 'unarchived the document',
-    'type_change': 'changed the document type',
-    'extraction_done': 'text extraction finished',
-    'extraction_failed': 'text extraction failed',
-    'acl_change': 'changed permissions',
+    'create': 'hat das Dokument erstellt',
+    'edit_metadata': 'hat Metadaten bearbeitet',
+    'edit_fields': 'hat Felder bearbeitet',
+    'version_upload': 'hat eine Version hochgeladen',
+    'version_replace_file': 'hat eine Versionsdatei ersetzt',
+    'version_hide': 'hat eine Version ausgeblendet',
+    'version_unhide': 'hat eine Version eingeblendet',
+    'version_release': 'hat eine Version freigegeben',
+    'download': 'hat heruntergeladen',
+    'view': 'hat angesehen',
+    'archive': 'hat das Dokument archiviert',
+    'unarchive': 'hat das Dokument dearchiviert',
+    'type_change': 'hat den Dokumenttyp geändert',
+    'extraction_done': 'Texterkennung abgeschlossen',
+    'extraction_failed': 'Texterkennung fehlgeschlagen',
+    'acl_change': 'hat Berechtigungen geändert',
   };
 
   bool get _deEmphasized =>
@@ -169,17 +170,21 @@ class _AuditLine extends StatelessWidget {
     final actor = event.actor ?? 'System';
     var label = _labels[event.action] ?? event.action;
     if (repeat > 1) {
-      label = event.action == 'view' ? 'viewed $repeat×' : 'downloaded $repeat×';
+      label = event.action == 'view'
+          ? 'hat $repeat× angesehen'
+          : 'hat $repeat× heruntergeladen';
     }
     if (event.action == 'version_release' &&
         event.context?['version'] != null) {
-      label = 'released v${event.context!['version']}';
+      label = 'hat v${event.context!['version']} freigegeben';
     }
     // Approvals hand-off §6: the upload/replace awaits release — say so.
     if (event.context?['pending_approval'] == true) {
-      if (event.action == 'version_upload') label = 'proposed a new version';
+      if (event.action == 'version_upload') {
+        label = 'hat eine neue Version vorgeschlagen';
+      }
       if (event.action == 'version_replace_file') {
-        label = 'replaced a version file (awaiting release)';
+        label = 'hat eine Versionsdatei ersetzt (wartet auf Freigabe)';
       }
     }
     final muted = theme.textTheme.bodySmall?.copyWith(
@@ -239,7 +244,7 @@ class _ReplaceDiffLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Version ${event.version} content changed by file replacement',
+          'Inhalt von Version ${event.version} durch Dateiersetzung geändert',
           style: theme.textTheme.bodyMedium,
         ),
         Text(
@@ -350,13 +355,13 @@ class _CommentBubble extends StatelessWidget {
                       text: event.author,
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    const TextSpan(text: ' commented'),
+                    const TextSpan(text: ' hat kommentiert'),
                     if (event.editedAt != null)
                       TextSpan(
                         text: event.editedBy != null &&
                                 event.editedBy != event.author
-                            ? ' · edited by ${event.editedBy}'
-                            : ' · edited',
+                            ? ' · bearbeitet von ${event.editedBy}'
+                            : ' · bearbeitet',
                         style: TextStyle(color: scheme.onSurfaceVariant),
                       ),
                   ]),
@@ -380,8 +385,8 @@ class _CommentBubble extends StatelessWidget {
           Text(formatDateTime(event.timestamp), style: muted),
           if (deleted)
             Text(
-              'Removed'
-              '${event.deletedBy != null ? ' by ${event.deletedBy}' : ''}'
+              'Entfernt'
+              '${event.deletedBy != null ? ' von ${event.deletedBy}' : ''}'
               '${event.deletedAt != null ? ' · ${formatDateTime(event.deletedAt!)}' : ''}',
               style: muted?.copyWith(fontStyle: FontStyle.italic),
             ),
@@ -455,7 +460,7 @@ class _VersionCard extends StatelessWidget {
             // versions stay unannotated (approvals hand-off §5).
             if (!hidden && event.releasedBy != null)
               Text(
-                'Released by ${event.releasedBy}'
+                'Freigegeben von ${event.releasedBy}'
                 '${event.releasedAt != null ? ' · ${formatDateTime(event.releasedAt!)}' : ''}',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant),
@@ -464,7 +469,7 @@ class _VersionCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  'Hidden${event.hiddenBy != null ? ' by ${event.hiddenBy}' : ''}'
+                  'Ausgeblendet${event.hiddenBy != null ? ' von ${event.hiddenBy}' : ''}'
                   '${(event.hiddenReason?.isNotEmpty ?? false) ? ': ${event.hiddenReason}' : ''}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
@@ -488,8 +493,8 @@ class _VersionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'What changes if released'
-                      '${event.proposedDiff!.fromVersion == null ? ' (no released baseline)' : ''}',
+                      'Was sich bei Freigabe ändert'
+                      '${event.proposedDiff!.fromVersion == null ? ' (keine freigegebene Vergleichsbasis)' : ''}',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
@@ -508,14 +513,14 @@ class _VersionCard extends StatelessWidget {
     if (!hidden) return card;
     return Tooltip(
       message:
-          'Hidden${event.hiddenBy != null ? ' by ${event.hiddenBy}' : ''}'
+          'Ausgeblendet${event.hiddenBy != null ? ' von ${event.hiddenBy}' : ''}'
           '${(event.hiddenReason?.isNotEmpty ?? false) ? ' — ${event.hiddenReason}' : ''}',
       child: card,
     );
   }
 }
 
-/// Amber "awaiting release" chip for pending versions (approvals hand-off
+/// Amber "wartet auf Freigabe" chip for pending versions (approvals hand-off
 /// §9) — shared by the timeline version card and the detail versions card.
 class PendingReleaseBadge extends StatelessWidget {
   const PendingReleaseBadge({super.key});
@@ -532,7 +537,7 @@ class PendingReleaseBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        'awaiting release',
+        'wartet auf Freigabe',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: dark ? Colors.amber.shade200 : Colors.amber.shade900,
               fontWeight: FontWeight.w700,
@@ -563,7 +568,7 @@ class _DiffSectionState extends State<_DiffSection> {
 
     if (d.tooLarge) {
       return Text(
-        'diff too large — review the file directly',
+        'Unterschiede zu umfangreich — bitte die Datei direkt prüfen',
         style: theme.textTheme.bodySmall
             ?.copyWith(color: scheme.onSurfaceVariant),
       );
@@ -580,7 +585,7 @@ class _DiffSectionState extends State<_DiffSection> {
             size: 18, color: scheme.onSurfaceVariant),
         if (d.fromVersion != null)
           Text(
-            '  vs v${d.fromVersion}',
+            '  ggü. v${d.fromVersion}',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant),
           ),

@@ -11,7 +11,8 @@ final _chipFmt = DateFormat.yMMMd();
 /// full-screen dialog and its calendar body is private — so the grid comes from
 /// `calendar_date_picker2`. The two fields are the stock
 /// [InputDatePickerFormField], which brings localized parsing, the
-/// `mm/dd/yyyy`-style hint and the "Invalid format" / out-of-range messages.
+/// `tt.mm.jjjj`-style hint and the German "Ungültiges Format" /
+/// out-of-range messages.
 ///
 /// Changes apply immediately: picking two days, or typing a date and pressing
 /// Enter / leaving the field, commits through [onChanged].
@@ -106,7 +107,7 @@ class _DateRangeDropdownState extends State<DateRangeDropdown> {
       menuChildren: [_buildPanel(context)],
       builder: (context, controller, child) => FilterChip(
         label: Text(value == null
-            ? 'Date range'
+            ? 'Zeitraum'
             : '${_chipFmt.format(value.start)} – ${_chipFmt.format(value.end)}'),
         selected: value != null,
         avatar: value == null ? const Icon(Icons.date_range, size: 18) : null,
@@ -163,12 +164,12 @@ class _DateRangeDropdownState extends State<DateRangeDropdown> {
               children: [
                 TextButton(
                   onPressed: _start == null && _end == null ? null : _clear,
-                  child: const Text('Clear'),
+                  child: const Text('Zurücksetzen'),
                 ),
                 const Spacer(),
                 TextButton(
                   onPressed: _menu.close,
-                  child: const Text('Done'),
+                  child: const Text('Fertig'),
                 ),
               ],
             ),
@@ -199,7 +200,7 @@ class _DateRangeDropdownState extends State<DateRangeDropdown> {
             children: [
               Expanded(
                 child: _dateField(
-                  label: 'Start',
+                  label: 'Von',
                   initialDate: _start,
                   onDate: _setStart,
                 ),
@@ -207,7 +208,7 @@ class _DateRangeDropdownState extends State<DateRangeDropdown> {
               const SizedBox(width: 8),
               Expanded(
                 child: _dateField(
-                  label: 'End',
+                  label: 'Bis',
                   initialDate: _end,
                   onDate: _setEnd,
                 ),

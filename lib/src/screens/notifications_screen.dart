@@ -151,10 +151,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inbox'),
+        title: const Text('Posteingang'),
         actions: [
           IconButton(
-            tooltip: _unreadOnly ? 'Show all' : 'Show unread only',
+            tooltip: _unreadOnly ? 'Alle anzeigen' : 'Nur ungelesene anzeigen',
             isSelected: _unreadOnly,
             icon: const Icon(Icons.mark_email_unread_outlined),
             selectedIcon: const Icon(Icons.mark_email_unread),
@@ -164,17 +164,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             },
           ),
           IconButton(
-            tooltip: 'Mark all as read',
+            tooltip: 'Alle als gelesen markieren',
             icon: const Icon(Icons.done_all),
             onPressed: unread > 0 ? _markAllRead : null,
           ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'Aktualisieren',
             icon: const Icon(Icons.refresh),
             onPressed: _load,
           ),
           IconButton(
-            tooltip: 'Email preferences',
+            tooltip: 'E-Mail-Einstellungen',
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => showDialog<void>(
               context: context,
@@ -191,8 +191,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   ? Center(
                       child: Text(
                         _unreadOnly
-                            ? 'No unread notifications.'
-                            : 'No notifications.',
+                            ? 'Keine ungelesenen Benachrichtigungen.'
+                            : 'Keine Benachrichtigungen.',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -232,24 +232,28 @@ class _NotificationTile extends StatelessWidget {
     required this.onMarkRead,
   });
 
-  // Audit actions phrased for "<actor> <phrase> <title>" (same vocabulary as
-  // the timeline's _AuditLine labels).
-  static const _actionPhrases = {
-    'create': 'created',
-    'edit_metadata': 'edited metadata on',
-    'edit_fields': 'edited fields on',
-    'version_upload': 'uploaded a new version of',
-    'version_replace_file': 'replaced a file in',
-    'version_hide': 'hid a version of',
-    'version_unhide': 'unhid a version of',
-    'version_release': 'released a version of',
-    'archive': 'archived',
-    'unarchive': 'unarchived',
-    'type_change': 'changed the type of',
-    'delete': 'deleted',
-    'comment_add': 'commented on',
-    'comment_edit': 'edited a comment on',
-    'comment_delete': 'deleted a comment on',
+  // Audit actions phrased as "<Akteur> <before> <Titel> <after>" — German
+  // puts the participle after the object, so the title is bracketed rather
+  // than trailing (same vocabulary as the timeline's _AuditLine labels).
+  static const _actionPhrases = <String, ({String before, String after})>{
+    'create': (before: 'hat', after: 'erstellt'),
+    'edit_metadata': (before: 'hat die Metadaten von', after: 'bearbeitet'),
+    'edit_fields': (before: 'hat Felder von', after: 'bearbeitet'),
+    'version_upload': (
+      before: 'hat eine neue Version von',
+      after: 'hochgeladen',
+    ),
+    'version_replace_file': (before: 'hat eine Datei in', after: 'ersetzt'),
+    'version_hide': (before: 'hat eine Version von', after: 'ausgeblendet'),
+    'version_unhide': (before: 'hat eine Version von', after: 'eingeblendet'),
+    'version_release': (before: 'hat eine Version von', after: 'freigegeben'),
+    'archive': (before: 'hat', after: 'archiviert'),
+    'unarchive': (before: 'hat', after: 'dearchiviert'),
+    'type_change': (before: 'hat den Typ von', after: 'geändert'),
+    'delete': (before: 'hat', after: 'gelöscht'),
+    'comment_add': (before: 'hat', after: 'kommentiert'),
+    'comment_edit': (before: 'hat einen Kommentar zu', after: 'bearbeitet'),
+    'comment_delete': (before: 'hat einen Kommentar zu', after: 'gelöscht'),
   };
 
   IconData get _icon => switch (item.kind) {
@@ -264,17 +268,17 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final actor = item.actor ?? 'someone';
+    final actor = item.actor ?? 'Jemand';
     final title = item.payloadDocumentTitle;
 
     final TextSpan headline;
     switch (item.kind) {
       case 'mention':
-        headline = _span(actor, 'mentioned you on', title);
+        headline = _span(actor, 'hat Sie in', title, 'erwähnt');
       case 'watched_document' || 'watched_type':
         final phrase = _actionPhrases[item.action] ??
-            item.action.replaceAll('_', ' ');
-        headline = _span(actor, phrase, title);
+            (before: 'hat', after: item.action.replaceAll('_', ' '));
+        headline = _span(actor, phrase.before, title, phrase.after);
       default:
         // Unknown/reserved kinds (e.g. workflow): generic fallback (§2).
         headline = TextSpan(
@@ -288,7 +292,7 @@ class _NotificationTile extends StatelessWidget {
 
     final details = <String>[
       formatDateTime(item.createdAt),
-      if (item.kind == 'watched_type') 'watched category',
+      if (item.kind == 'watched_type') 'beobachtete Kategorie',
       if (item.version != null) 'v${item.version}',
       if (item.changedFields.isNotEmpty) item.changedFields.join(', '),
     ];
@@ -324,7 +328,7 @@ class _NotificationTile extends StatelessWidget {
       trailing: item.isRead
           ? null
           : IconButton(
-              tooltip: 'Mark as read',
+              tooltip: 'Als gelesen markieren',
               icon: Icon(Icons.circle, size: 10, color: scheme.primary),
               onPressed: onMarkRead,
             ),
@@ -332,17 +336,24 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
-  static TextSpan _span(String actor, String phrase, String title) => TextSpan(
+  static TextSpan _span(
+    String actor,
+    String before,
+    String title,
+    String after,
+  ) =>
+      TextSpan(
         children: [
           TextSpan(
             text: actor,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          TextSpan(text: ' $phrase '),
+          TextSpan(text: ' $before '),
           TextSpan(
             text: title,
             style: const TextStyle(fontStyle: FontStyle.italic),
           ),
+          TextSpan(text: ' $after'),
         ],
       );
 }
@@ -392,7 +403,7 @@ class _PreferencesDialogState extends ConsumerState<_PreferencesDialog> {
   Widget build(BuildContext context) {
     final prefs = _prefs;
     return AlertDialog(
-      title: const Text('Email notifications'),
+      title: const Text('E-Mail-Benachrichtigungen'),
       content: SizedBox(
         width: 400,
         child: _error != null
@@ -406,23 +417,24 @@ class _PreferencesDialogState extends ConsumerState<_PreferencesDialog> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'The inbox always receives every notification; these '
-                        'only control the emails sent on top.',
+                        'Der Posteingang erhält immer jede Benachrichtigung; '
+                        'diese Schalter steuern nur die zusätzlich '
+                        'versendeten E-Mails.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
-                        title: const Text('Mentions'),
+                        title: const Text('Erwähnungen'),
                         value: prefs.emailMentions,
                         onChanged: (v) => _set('email_mentions', v),
                       ),
                       SwitchListTile(
-                        title: const Text('Watched documents & categories'),
+                        title: const Text('Beobachtete Dokumente & Kategorien'),
                         value: prefs.emailWatches,
                         onChanged: (v) => _set('email_watches', v),
                       ),
                       SwitchListTile(
-                        title: const Text('Workflows (future)'),
+                        title: const Text('Workflows (zukünftig)'),
                         value: prefs.emailWorkflow,
                         onChanged: (v) => _set('email_workflow', v),
                       ),
@@ -432,7 +444,7 @@ class _PreferencesDialogState extends ConsumerState<_PreferencesDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          child: const Text('Schließen'),
         ),
       ],
     );

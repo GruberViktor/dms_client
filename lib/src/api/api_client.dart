@@ -38,7 +38,7 @@ class ApiException implements Exception {
 
   static ApiException fromDio(DioException e) {
     final res = e.response;
-    String detail = e.message ?? 'Network error';
+    String detail = e.message ?? 'Netzwerkfehler';
     String? code;
     final extras = <String, dynamic>{};
     final data = res?.data;
