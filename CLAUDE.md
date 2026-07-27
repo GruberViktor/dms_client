@@ -30,7 +30,8 @@ token) in flutter_secure_storage.
   count polled every 45 s (no push channel exists) and the session-cached
   watch set with optimistic document/type toggles.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
-  document list (compact search field + type dropdown, type-tree drawer,
+  document list (compact search field + type dropdown, type tree as an
+  inline collapsible sidebar ≥760px content width / overlay drawer below,
   Active/All/Archived, date range, metadata filters, infinite scroll —
   a non-empty query feeds the same card grid from `/search/` instead, and
   hides the date/metadata chips that endpoint cannot apply; headlines are

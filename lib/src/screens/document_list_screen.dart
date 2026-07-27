@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:decimal/decimal.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -61,6 +62,18 @@ class DocumentListScreen extends ConsumerStatefulWidget {
 
 class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   static const _pageSize = 50;
+
+  /// Content width from which the type tree becomes an inline sidebar instead
+  /// of an overlay drawer.
+  static const _sidebarBreakpoint = 1000.0;
+  static const _sidebarDefaultWidth = 300.0;
+  static const _sidebarMinWidth = 180.0;
+
+  /// Static so the expanded/collapsed choice and the dragged sidebar width
+  /// survive leaving and re-entering the tab (the shell rebuilds this screen),
+  /// for the app's lifetime.
+  static bool _sidebarExpanded = true;
+  static double _sidebarWidth = _sidebarDefaultWidth;
 
   DocumentFilters _filters = const DocumentFilters();
   final _scrollCtrl = ScrollController();
@@ -290,6 +303,13 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _build(context, wide: constraints.maxWidth >= _sidebarBreakpoint),
+    );
+  }
+
+  Widget _build(BuildContext context, {required bool wide}) {
     final typesAsync = ref.watch(documentTypesProvider);
     final bySlug = ref.watch(documentTypesBySlugProvider);
     final typeName = _filters.typeSlug != null
@@ -305,6 +325,18 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         autofocus: true,
         child: Scaffold(
           appBar: AppBar(
+            // Wide layout has no drawer, so Scaffold inserts no hamburger —
+            // this is the sidebar expand/collapse toggle instead.
+            leading: wide
+                ? IconButton(
+                    tooltip: _sidebarExpanded
+                        ? 'Hide categories'
+                        : 'Show categories',
+                    icon: Icon(_sidebarExpanded ? Icons.menu_open : Icons.menu),
+                    onPressed: () =>
+                        setState(() => _sidebarExpanded = !_sidebarExpanded),
+                  )
+                : null,
             title: Text(typeName ?? 'Documents'),
             actions: [
               IconButton(
@@ -325,49 +357,54 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 ),
             ],
           ),
-          drawer: Drawer(
-            child: SafeArea(
-              child: typesAsync.when(
-                data: (types) => TypeTree(
-                  types: types,
-                  selectedSlug: _filters.typeSlug,
-                  onSelected: (slug) {
-                    Navigator.of(context).pop();
-                    _applyFilters(_filters.copyWith(typeSlug: () => slug));
-                  },
-                  watchedSlugs: ref.watch(watchesProvider).types,
-                  onToggleWatch: _toggleTypeWatch,
+          // Narrow layouts keep the overlay drawer; wide ones get the inline
+          // sidebar below.
+          drawer: wide
+              ? null
+              : Drawer(
+                  child: SafeArea(
+                    child: _buildTypeTree(
+                      typesAsync,
+                      onSelected: (slug) {
+                        Navigator.of(context).pop();
+                        _applyFilters(_filters.copyWith(typeSlug: () => slug));
+                      },
+                    ),
+                  ),
                 ),
-                error: (e, _) => ErrorRetry(
-                  error: e,
-                  onRetry: () => ref.invalidate(documentTypesProvider),
-                ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-              ),
-            ),
-          ),
           body: DropTarget(
             onDragEntered: (_) => setState(() => _dragging = true),
             onDragExited: (_) => setState(() => _dragging = false),
             onDragDone: _onDrop,
-            child: Stack(
+            child: Row(
               children: [
-                Column(
-                  children: [
-                    _buildSearchRow(context, typesAsync.value ?? const []),
-                    _buildFilterBar(context),
-                    const Divider(height: 1),
-                    // Keeps the previous page visible while the next one loads.
-                    if (_loading && _initialLoaded)
-                      const LinearProgressIndicator(minHeight: 2),
-                    Expanded(child: _buildResults(context, bySlug)),
-                    if (_pageCount > 1) ...[
-                      const Divider(height: 1),
-                      _buildPager(context),
+                if (wide) _buildSidebar(typesAsync),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Column(
+                        children: [
+                          _buildSearchRow(
+                            context,
+                            typesAsync.value ?? const [],
+                          ),
+                          _buildFilterBar(context),
+                          const Divider(height: 1),
+                          // Keeps the previous page visible while the next one
+                          // loads.
+                          if (_loading && _initialLoaded)
+                            const LinearProgressIndicator(minHeight: 2),
+                          Expanded(child: _buildResults(context, bySlug)),
+                          if (_pageCount > 1) ...[
+                            const Divider(height: 1),
+                            _buildPager(context),
+                          ],
+                        ],
+                      ),
+                      if (_dragging) _buildDropOverlay(context),
                     ],
-                  ],
+                  ),
                 ),
-                if (_dragging) _buildDropOverlay(context),
               ],
             ),
           ),
@@ -383,6 +420,80 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
               );
               _reload();
             },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeTree(
+    AsyncValue<List<DocumentType>> typesAsync, {
+    required ValueChanged<String?> onSelected,
+  }) {
+    return typesAsync.when(
+      data: (types) => TypeTree(
+        types: types,
+        selectedSlug: _filters.typeSlug,
+        onSelected: onSelected,
+        watchedSlugs: ref.watch(watchesProvider).types,
+        onToggleWatch: _toggleTypeWatch,
+      ),
+      error: (e, _) => ErrorRetry(
+        error: e,
+        onRetry: () => ref.invalidate(documentTypesProvider),
+      ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  /// Inline type-tree sidebar for wide layouts: collapses to zero width (and
+  /// stays out of the layout) instead of overlaying the list like the drawer.
+  Widget _buildSidebar(AsyncValue<List<DocumentType>> typesAsync) {
+    final theme = Theme.of(context);
+    // Never let the tree eat more than half the window, and re-clamp on every
+    // build so shrinking the window pulls an over-wide sidebar back in.
+    final maxWidth = math.max(
+      _sidebarMinWidth,
+      MediaQuery.sizeOf(context).width / 2,
+    );
+    final width = _sidebarWidth.clamp(_sidebarMinWidth, maxWidth);
+    return ClipRect(
+      child: AnimatedAlign(
+        alignment: Alignment.centerLeft,
+        widthFactor: _sidebarExpanded ? 1 : 0,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: SizedBox(
+          width: width,
+          child: Row(
+            children: [
+              Expanded(
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerLow,
+                  child: SafeArea(
+                    right: false,
+                    child: _buildTypeTree(
+                      typesAsync,
+                      onSelected: (slug) => _applyFilters(
+                        _filters.copyWith(typeSlug: () => slug),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              _SidebarResizeHandle(
+                // Track from the clamped width, not the stored one, so a drag
+                // that hit a bound doesn't have to "unwind" slack first.
+                onDrag: (dx) => setState(
+                  () => _sidebarWidth = (width + dx).clamp(
+                    _sidebarMinWidth,
+                    maxWidth,
+                  ),
+                ),
+                onReset: () =>
+                    setState(() => _sidebarWidth = _sidebarDefaultWidth),
+              ),
+            ],
           ),
         ),
       ),
@@ -704,6 +815,54 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     ).push(MaterialPageRoute(builder: (_) => DocumentDetailScreen(uuid: uuid)));
     // Archive state etc. may have changed.
     _reload();
+  }
+}
+
+/// Splitter on the sidebar's trailing edge: draws the same 1px rule the
+/// [VerticalDivider] did, but widens and tints on hover/drag and carries an
+/// 8px hit area so it can be grabbed without pixel-hunting. Double-tap resets.
+class _SidebarResizeHandle extends StatefulWidget {
+  final ValueChanged<double> onDrag;
+  final VoidCallback onReset;
+
+  const _SidebarResizeHandle({required this.onDrag, required this.onReset});
+
+  @override
+  State<_SidebarResizeHandle> createState() => _SidebarResizeHandleState();
+}
+
+class _SidebarResizeHandleState extends State<_SidebarResizeHandle> {
+  bool _hovered = false;
+  bool _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final active = _hovered || _dragging;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragUpdate: (d) => widget.onDrag(d.delta.dx),
+        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        onDoubleTap: widget.onReset,
+        child: SizedBox(
+          width: 8,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: active ? 3 : 1,
+              height: double.infinity,
+              color: active ? theme.colorScheme.primary : theme.dividerColor,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
