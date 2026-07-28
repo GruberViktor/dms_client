@@ -1,7 +1,16 @@
+import 'package:decimal/decimal.dart';
+import 'package:decimal/intl.dart';
 import 'package:intl/intl.dart';
 
 final _dateFmt = DateFormat.yMMMd();
 final _dateTimeFmt = DateFormat.yMMMd().add_Hm();
+
+/// German number formatting for monetary values: `1234.5` → `1.234,50`.
+/// Formats straight from `Decimal` (never via `double`), so long decimal
+/// strings keep their exact value.
+final _moneyFmt = DecimalFormatter(
+  NumberFormat.decimalPatternDigits(decimalDigits: 2),
+);
 
 String formatDate(String? isoDate) {
   if (isoDate == null || isoDate.isEmpty) return '—';
@@ -11,6 +20,17 @@ String formatDate(String? isoDate) {
 
 String formatDateTime(DateTime? dt) =>
     dt != null ? _dateTimeFmt.format(dt.toLocal()) : '—';
+
+/// Monetary metadata values arrive as decimal strings (see CLAUDE.md); older
+/// rows may still carry a JSON number. Rendered German: comma decimal
+/// separator, dot grouping, always two decimals. Anything unparseable is
+/// shown verbatim rather than swallowed.
+String formatMonetary(Object? value) {
+  final raw = value?.toString().trim() ?? '';
+  if (raw.isEmpty) return '—';
+  final dec = Decimal.tryParse(raw.replaceAll(',', '.'));
+  return dec != null ? _moneyFmt.format(dec) : raw;
+}
 
 String formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';

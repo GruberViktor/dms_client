@@ -1091,7 +1091,7 @@ class _MetadataCard extends StatelessWidget {
       case FieldType.boolean:
         return value == true ? 'Ja' : 'Nein';
       case FieldType.monetary:
-        return '$value'; // decimal string from the server, shown verbatim
+        return formatMonetary(value);
       default:
         return '$value';
     }
