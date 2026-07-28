@@ -421,4 +421,87 @@ void main() {
     // can_view is only advisory and defaults to true when absent.
     expect(UserSuggestion.fromJson({'username': 'bob'}).canView, isTrue);
   });
+
+  group('storage binding (storage hand-off)', () {
+    DocumentType type(String slug, String? parent,
+            {int? policy, int? storage}) =>
+        DocumentType(
+          slug: slug,
+          name: slug,
+          parentSlug: parent,
+          depth: parent == null ? 0 : 1,
+          retentionPolicy: policy,
+          storage: storage,
+          isActive: true,
+          metadataFields: const [],
+        );
+
+    test('RetentionPolicy and DocumentType parse their storage pk', () {
+      final p = RetentionPolicy.fromJson({
+        'id': 3,
+        'name': '7 Jahre',
+        'retention_years': 7,
+        'anchor': 'document_date',
+        'storage': 2,
+        'is_compliance': true,
+      });
+      expect(p.storage, 2);
+      expect(p.retentionYears, 7);
+
+      // Pre-migration payloads without the field stay parseable.
+      expect(
+        RetentionPolicy.fromJson({'id': 4, 'name': 'frei'}).storage,
+        isNull,
+      );
+
+      final t = DocumentType.fromJson({
+        'slug': 'invoice',
+        'name': 'Rechnung',
+        'storage': 5,
+        'metadata_fields': const [],
+      });
+      expect(t.storage, 5);
+      expect(DocumentType.fromJson({'slug': 'x', 'name': 'X'}).storage, isNull);
+    });
+
+    test('only object-locked S3 can hold a retention policy', () {
+      Storage s(String backend, bool lock) => Storage.fromJson({
+            'id': 1,
+            'name': 'n',
+            'slug': 'n',
+            'backend': backend,
+            'object_lock_enabled': lock,
+          });
+      expect(s('s3', true).canHoldRetention, isTrue);
+      expect(s('s3', false).canHoldRetention, isFalse);
+      expect(s('filesystem', true).canHoldRetention, isFalse);
+    });
+
+    test('effectiveRetentionPolicy walks up the type tree', () {
+      final bySlug = {
+        'root': type('root', null, policy: 7),
+        'child': type('child', 'root'),
+        'grandchild': type('grandchild', 'child'),
+        'own': type('own', 'root', policy: 9),
+        'loose': type('loose', null),
+      };
+      // Inherited from an ancestor …
+      expect(effectiveRetentionPolicy(bySlug, 'grandchild'), 7);
+      // … own policy wins over the ancestor's …
+      expect(effectiveRetentionPolicy(bySlug, 'own'), 9);
+      // … and nothing anywhere up the chain means the type's own (fallback)
+      // storage decides.
+      expect(effectiveRetentionPolicy(bySlug, 'loose'), isNull);
+      expect(effectiveRetentionPolicy(bySlug, null), isNull);
+    });
+
+    test('storageName resolves ids, falls back to #id', () {
+      final storages = [
+        Storage.fromJson({'id': 2, 'name': 'Archiv S3', 'backend': 's3'}),
+      ];
+      expect(storageName(storages, 2), 'Archiv S3');
+      expect(storageName(storages, 99), '#99');
+      expect(storageName(storages, null), '—');
+    });
+  });
 }

@@ -129,6 +129,18 @@ rows, and replace-file warns that it resets a released version to pending
 (§7). Reject = the existing hide flow. No pending-approvals queue exists
 server-side (§10).
 
+Storage-binding hand-off implemented: retention policies carry a required
+`storage` pk. The policy dialog picks it from `/storages/`, and with
+`retention_years` filled the dropdown is filtered to object-locked S3
+(`Storage.canHoldRetention`) — typing years clears an now-ineligible pick and
+says so, and with no locked-S3 storage at all the years field is disabled with
+a hint. The storages tab names the compliance policies bound to a storage
+(the server refuses to drop its object lock while they exist; the client has
+no toggle for it anyway). `DocumentType.storage` is only a *fallback* — the
+type editor labels it as such and spells out the real destination, resolving
+the inherited policy client-side via `effectiveRetentionPolicy` (walks
+`parent_slug`, same caveat as the approval mode: display only).
+
 ACL editor caveat: PUT acls body is `[{"group": <pk>, "permissions": [...]}]`
 and there is no group listing API (spec §10) — groups are entered as raw ids.
 

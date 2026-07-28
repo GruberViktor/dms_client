@@ -97,6 +97,11 @@ class DocumentType {
   final String? parentSlug;
   final int depth;
   final int? retentionPolicy;
+
+  /// Fallback storage: only used while *no* retention policy is in effect for
+  /// this type (own or inherited) — otherwise the policy's storage wins
+  /// (storage hand-off §4).
+  final int? storage;
   final bool isActive;
   // null = inherit from parent (approvals hand-off §2); root default "none".
   final String? approvalMode; // none | required | four_eyes | null
@@ -108,6 +113,7 @@ class DocumentType {
     required this.parentSlug,
     required this.depth,
     required this.retentionPolicy,
+    this.storage,
     required this.isActive,
     this.approvalMode,
     required this.metadataFields,
@@ -121,6 +127,7 @@ class DocumentType {
             : null,
         depth: (json['depth'] as num?)?.toInt() ?? 0,
         retentionPolicy: (json['retention_policy'] as num?)?.toInt(),
+        storage: (json['storage'] as num?)?.toInt(),
         isActive: json['is_active'] != false,
         approvalMode: json['approval_mode'] as String?,
         metadataFields: ((json['metadata_fields'] as List?) ?? const [])
@@ -143,6 +150,22 @@ String effectiveApprovalMode(Map<String, DocumentType> bySlug, String? slug) {
     cur = t.parentSlug;
   }
   return 'none';
+}
+
+/// Effective retention policy id for [slug]: the nearest non-null
+/// `retention_policy` walking up `parent_slug` (policies are inherited down
+/// the type tree), or null when no ancestor carries one. Display use only —
+/// the server decides what actually applies.
+int? effectiveRetentionPolicy(Map<String, DocumentType> bySlug, String? slug) {
+  String? cur = slug;
+  final seen = <String>{};
+  while (cur != null && seen.add(cur)) {
+    final t = bySlug[cur];
+    if (t == null) break;
+    if (t.retentionPolicy != null) return t.retentionPolicy;
+    cur = t.parentSlug;
+  }
+  return null;
 }
 
 /// Builds the merged (ancestor-inherited) metadata field set for [slug]:
@@ -684,12 +707,18 @@ class RetentionPolicy {
   final String anchor; // document_date | date_added
   final bool isCompliance;
 
+  /// Storage this policy binds its documents to (required since the storage
+  /// hand-off §1). With `retentionYears` set it may only point at an
+  /// object-locked S3 storage — the retention date is stamped on the object.
+  final int? storage;
+
   RetentionPolicy({
     required this.id,
     required this.name,
     required this.retentionYears,
     required this.anchor,
     required this.isCompliance,
+    required this.storage,
   });
 
   factory RetentionPolicy.fromJson(Map<String, dynamic> json) =>
@@ -699,6 +728,7 @@ class RetentionPolicy {
         retentionYears: (json['retention_years'] as num?)?.toInt(),
         anchor: (json['anchor'] as String?) ?? 'document_date',
         isCompliance: _asBool(json['is_compliance']),
+        storage: (json['storage'] as num?)?.toInt(),
       );
 }
 
@@ -742,6 +772,20 @@ class Storage {
         isDefault: _asBool(json['is_default']),
         isActive: json['is_active'] != false,
       );
+
+  /// Only an object-locked S3 bucket can carry a retention policy with
+  /// `retention_years` — the retention date is stamped on the object itself
+  /// (storage hand-off §2).
+  bool get canHoldRetention => backend == 's3' && objectLockEnabled;
+}
+
+/// Display name for a storage id — policies and types only carry the pk.
+String storageName(List<Storage> storages, int? id) {
+  if (id == null) return '—';
+  for (final s in storages) {
+    if (s.id == id) return s.name;
+  }
+  return '#$id';
 }
 
 /// One entry of a type's own ACL list: a group pk plus its permissions.

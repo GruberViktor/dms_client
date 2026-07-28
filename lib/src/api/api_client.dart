@@ -49,10 +49,17 @@ class ApiException implements Exception {
       if (d is String) {
         detail = d;
       } else if (map.isNotEmpty) {
-        // DRF field errors: {"field": ["msg", ...]}
+        // DRF field errors: {"field": ["msg", ...]}. `non_field_errors`
+        // carries plain prose (e.g. the storage/object-lock rejection) —
+        // showing the key in front of it only adds noise.
         detail = map.entries
             .where((en) => en.key != 'code')
-            .map((en) => '${en.key}: ${en.value is List ? (en.value as List).join(', ') : en.value}')
+            .map((en) {
+              final value = en.value is List
+                  ? (en.value as List).join(', ')
+                  : '${en.value}';
+              return en.key == 'non_field_errors' ? value : '${en.key}: $value';
+            })
             .join('\n');
       }
       extras.addAll(map..remove('detail'));

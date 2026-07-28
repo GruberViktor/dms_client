@@ -25,6 +25,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
       TextEditingController(text: widget.existing?.slug ?? '');
   late String? _parentSlug = widget.existing?.parentSlug;
   late int? _retentionPolicy = widget.existing?.retentionPolicy;
+  late int? _storage = widget.existing?.storage;
   late bool _isActive = widget.existing?.isActive ?? true;
   // null = inherit from parent (approvals hand-off §2).
   late String? _approvalMode = widget.existing?.approvalMode;
@@ -40,6 +41,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
   Object? _aclError;
 
   List<RetentionPolicy> _policies = const [];
+  List<Storage> _storages = const [];
 
   @override
   void initState() {
@@ -59,6 +61,10 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
     try {
       final policies = await api.retentionPolicies();
       if (mounted) setState(() => _policies = policies);
+    } catch (_) {/* dropdown just stays id-only */}
+    try {
+      final storages = await api.storages();
+      if (mounted) setState(() => _storages = storages);
     } catch (_) {/* dropdown just stays id-only */}
     if (widget.existing != null) {
       _reloadFields();
@@ -99,6 +105,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
       if (widget.existing == null) 'slug': _slugCtrl.text.trim(),
       'parent': _parentSlug,
       'retention_policy': _retentionPolicy,
+      'storage': _storage,
       'is_active': _isActive,
       'approval_mode': _approvalMode,
     };
@@ -258,6 +265,27 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
         parentOptions.any((t) => t.slug == _parentSlug) ? _parentSlug : null;
     final selectedPolicy =
         _policies.any((p) => p.id == _retentionPolicy) ? _retentionPolicy : null;
+    final selectedStorage =
+        _storages.any((s) => s.id == _storage) ? _storage : null;
+
+    // Storage routing (storage hand-off §4): a retention policy — own or
+    // inherited from an ancestor — decides where documents land; the type's
+    // own storage is only the fallback for types no policy applies to.
+    final effectivePolicyId = _retentionPolicy ??
+        effectiveRetentionPolicy(
+            {for (final t in types) t.slug: t}, _parentSlug);
+    final effectivePolicy = effectivePolicyId == null
+        ? null
+        : _policies.cast<RetentionPolicy?>().firstWhere(
+            (p) => p!.id == effectivePolicyId,
+            orElse: () => null);
+    final policyInherited =
+        _retentionPolicy == null && effectivePolicyId != null;
+    final fallbackTarget = selectedStorage == null
+        ? 'Standard-Speicher'
+        : storageName(_storages, selectedStorage);
+    final policyTarget = storageName(_storages, effectivePolicy?.storage);
+    final policyLabel = effectivePolicy?.name ?? '#$effectivePolicyId';
 
     return PopScope(
       canPop: true,
@@ -363,6 +391,64 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     onChanged: _busy
                         ? null
                         : (v) => setState(() => _retentionPolicy = v),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    initialValue: selectedStorage,
+                    decoration: InputDecoration(
+                      labelText: 'Ausweich-Speicher',
+                      helperText: effectivePolicyId != null
+                          ? 'Ohne Wirkung, solange eine Aufbewahrungsregel '
+                              'greift — dann bestimmt deren Speicher das Ziel.'
+                          : 'Ziel für Dokumente dieses Typs, solange keine '
+                              'Aufbewahrungsregel greift (leer = Standard).',
+                      helperMaxLines: 3,
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('— Standard-Speicher —')),
+                      for (final s in _storages)
+                        DropdownMenuItem<int?>(
+                          value: s.id,
+                          child: Text([
+                            s.name,
+                            if (s.canHoldRetention) 'Object Lock',
+                            if (!s.isActive) 'inaktiv',
+                          ].join(' · ')),
+                        ),
+                    ],
+                    onChanged:
+                        _busy ? null : (v) => setState(() => _storage = v),
+                  ),
+                  // Say plainly where documents of this type actually land —
+                  // the field above does nothing while a policy applies,
+                  // inherited ones included.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          effectivePolicyId != null
+                              ? Icons.lock_outline
+                              : Icons.info_outline,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            effectivePolicyId == null
+                                ? 'Tatsächliches Ziel: $fallbackTarget'
+                                : 'Tatsächliches Ziel: $policyTarget '
+                                    '(aus Regel „$policyLabel“'
+                                    '${policyInherited ? ', geerbt' : ''})',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String?>(
