@@ -8,7 +8,7 @@ import 'permissions.dart';
 const _storage = FlutterSecureStorage();
 const _kToken = 'dms_token';
 const _kBaseUrl = 'dms_base_url';
-const _kDefaultBaseUrl = 'http://localhost:8000/api/v1';
+const _kDefaultBaseUrl = 'https://dms.luvifermente.eu/api/v1';
 
 class Session {
   final ApiClient api;
@@ -104,8 +104,9 @@ class SessionNotifier extends Notifier<SessionState> {
   }
 }
 
-final sessionProvider =
-    NotifierProvider<SessionNotifier, SessionState>(SessionNotifier.new);
+final sessionProvider = NotifierProvider<SessionNotifier, SessionState>(
+  SessionNotifier.new,
+);
 
 /// Convenience: the API client of the active session. Only read when logged in.
 final apiProvider = Provider<ApiClient>((ref) {
@@ -120,8 +121,8 @@ final documentTypesProvider = FutureProvider<List<DocumentType>>((ref) async {
   return api.documentTypes();
 });
 
-final documentTypesBySlugProvider =
-    Provider<Map<String, DocumentType>>((ref) {
-  final types = ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
+final documentTypesBySlugProvider = Provider<Map<String, DocumentType>>((ref) {
+  final types =
+      ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
   return {for (final t in types) t.slug: t};
 });
