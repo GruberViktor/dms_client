@@ -1,5 +1,3 @@
-import 'package:flutter/services.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -45,10 +43,6 @@ class SessionNotifier extends Notifier<SessionState> {
       final api = _buildClient(baseUrl)..token = token;
       final user = await api.me();
       state = SessionState(session: Session(api, user));
-    } on PlatformException {
-      // Keyring locked after suspend/resume, or other platform error.
-      // Treat as no session and show login.
-      state = const SessionState();
     } catch (_) {
       // Token expired/revoked or server unreachable → show login.
       state = const SessionState();
@@ -110,9 +104,8 @@ class SessionNotifier extends Notifier<SessionState> {
   }
 }
 
-final sessionProvider = NotifierProvider<SessionNotifier, SessionState>(
-  SessionNotifier.new,
-);
+final sessionProvider =
+    NotifierProvider<SessionNotifier, SessionState>(SessionNotifier.new);
 
 /// Convenience: the API client of the active session. Only read when logged in.
 final apiProvider = Provider<ApiClient>((ref) {
@@ -127,8 +120,8 @@ final documentTypesProvider = FutureProvider<List<DocumentType>>((ref) async {
   return api.documentTypes();
 });
 
-final documentTypesBySlugProvider = Provider<Map<String, DocumentType>>((ref) {
-  final types =
-      ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
+final documentTypesBySlugProvider =
+    Provider<Map<String, DocumentType>>((ref) {
+  final types = ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
   return {for (final t in types) t.slug: t};
 });

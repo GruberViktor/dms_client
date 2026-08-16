@@ -24,9 +24,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.initState();
     ref.read(sessionProvider.notifier).storedBaseUrl().then((url) {
       if (mounted && _serverCtrl.text.isEmpty) _serverCtrl.text = url;
-    }).catchError((_) {
-      // PlatformException from locked keyring, or other error — ignore.
-      // The field stays empty/default.
     });
   }
 
