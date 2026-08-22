@@ -56,6 +56,20 @@ bool canDownloadAsPdf(String? mime) {
       m.contains('opendocument.text');
 }
 
+/// Markdown source we can render in-app from the extracted text.
+/// libmagic sniffs `.md` as `text/plain` far more often than `text/markdown`,
+/// so the filename decides and the mime only has to be textual (or unknown,
+/// e.g. while a version row carries no mime yet).
+bool isMarkdown(String? mime, String? filename) {
+  final m = mime ?? '';
+  if (m.isNotEmpty && !m.startsWith('text/')) return false;
+  final n = (filename ?? '').toLowerCase();
+  return n.endsWith('.md') ||
+      n.endsWith('.markdown') ||
+      n.endsWith('.mdown') ||
+      n.endsWith('.mkd');
+}
+
 /// "report.docx" → "report.pdf" (extension swapped, not appended).
 String pdfFilename(String name) {
   final dot = name.lastIndexOf('.');

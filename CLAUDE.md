@@ -80,10 +80,15 @@ token) in flutter_secure_storage.
   deduped server-side); only an explicit Download/open-externally action may
   call `…/download` or `…/download/pdf` (needs `download`, logged as one).
 - Detail-screen preview: PDFs (and odt/docx via `…/view/pdf`) render
-  in-app with pdfrx/pdfium — real text layer, select/copy. Other formats,
-  and PDF fetch failures, use the server preview images
-  (`/preview/?size=thumb|preview&page=N`, token header); 404 → mime-type
-  icon fallback. List thumbnails always use the server previews.
+  in-app with pdfrx/pdfium — real text layer, select/copy. Markdown
+  (`isMarkdown()` — extension decides, libmagic sniffs `.md` as `text/plain`)
+  renders with flutter_markdown_plus from `Document.content`: the extractor
+  stores text files verbatim, so the extracted text *is* the source and no
+  extra request is made. Because `content` is document-level it only covers
+  the effective released version — a pending markdown proposal falls through
+  to the icon. Other formats, and PDF fetch failures, use the server preview
+  images (`/preview/?size=thumb|preview&page=N`, token header); 404 →
+  mime-type icon fallback. List thumbnails always use the server previews.
 - Compliance mode: hide delete/replace-file actions, show the lock badge;
   archive stays available.
 - Branding: display name "LUVI Docs" (Android label, GTK/Win32 window title,

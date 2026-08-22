@@ -55,6 +55,7 @@ dependencies:
   desktop_drop: ^0.7.1
   calendar_date_picker2: ^3.0.0
   pdfrx: ^2.4.7
+  flutter_markdown_plus: ^1.0.12
 
 dev_dependencies:
   flutter_test:

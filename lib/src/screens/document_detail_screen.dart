@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../util/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -851,8 +852,20 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     // replaced, §7), fall back to the pending proposal — its per-version
     // preview is open to anyone with `view` (§5).
     final previewVersion = current ?? pending;
+    // Markdown has neither a PDF rendition nor server preview images, but the
+    // extractor stores text files verbatim — so `content` *is* the source.
+    // It belongs to the effective (released) version, hence only that one is
+    // rendered; a pending proposal falls through to the icon fallback.
+    final markdownSource =
+        previewVersion != null &&
+            previewVersion.number == current?.number &&
+            isMarkdown(previewVersion.mimeType, previewVersion.originalFilename)
+        ? (doc.content ?? '')
+        : null;
     final preview = previewVersion == null
         ? const SizedBox.shrink()
+        : markdownSource != null && markdownSource.trim().isNotEmpty
+        ? _MarkdownPreview(source: markdownSource)
         : (isPdfMime(previewVersion.mimeType) ||
                 canDownloadAsPdf(previewVersion.mimeType))
         ? _PdfPreview(
@@ -1929,6 +1942,107 @@ class _VersionsCard extends StatelessWidget {
 /// zoom. Native PDFs load their original bytes; odt/docx go through the
 /// server's on-the-fly PDF conversion. If the fetch fails we fall back to
 /// the server-rendered preview images.
+/// Rendered Markdown preview. The source is the extracted text of the
+/// version (text files are stored verbatim by the extractor), so this costs
+/// no extra request and is not audited as a second view.
+class _MarkdownPreview extends StatelessWidget {
+  final String source;
+
+  const _MarkdownPreview({required this.source});
+
+  Future<void> _openLink(BuildContext context, String? href) async {
+    final uri = href == null ? null : Uri.tryParse(href);
+    // Only absolute web/mail links: relative links point into the document
+    // set, which has no in-app route.
+    if (uri == null || !const {'http', 'https', 'mailto'}.contains(uri.scheme)) {
+      return;
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Link konnte nicht geöffnet werden: $href')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Markdown(
+        data: source,
+        selectable: true,
+        padding: const EdgeInsets.all(20),
+        onTapLink: (text, href, title) => _openLink(context, href),
+        // Relative image paths have no meaning here (the file lives in object
+        // storage), so only absolute web images are fetched — anything else
+        // shows its alt text instead of an asset-loading error.
+        imageBuilder: (uri, title, alt) =>
+            uri.scheme == 'http' || uri.scheme == 'https'
+            ? Image.network(
+                uri.toString(),
+                errorBuilder: (context, e, st) => _MarkdownImageStub(alt: alt),
+              )
+            : _MarkdownImageStub(alt: alt ?? uri.toString()),
+        styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+          p: theme.textTheme.bodyMedium,
+          code: theme.textTheme.bodySmall?.copyWith(
+            fontFamily: 'monospace',
+            backgroundColor: scheme.surfaceContainerHighest,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          blockquoteDecoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          horizontalRuleDecoration: BoxDecoration(
+            border: Border(top: BorderSide(color: scheme.outlineVariant)),
+          ),
+          tableBorder: TableBorder.all(color: scheme.outlineVariant),
+          a: TextStyle(
+            color: scheme.primary,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkdownImageStub extends StatelessWidget {
+  final String? alt;
+
+  const _MarkdownImageStub({this.alt});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.image_not_supported_outlined,
+            size: 18, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            (alt ?? '').isEmpty ? 'Bild' : alt!,
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _PdfPreview extends StatefulWidget {
   final ApiClient api;
   final String uuid;
