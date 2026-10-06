@@ -75,6 +75,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         comments = null;
       }
       if (!mounted) return;
+      // Our own edit (or one seen on refresh) changed the rendering: give the
+      // preview URLs a new `r=` so the viewers and the list thumbnails
+      // refetch. The first load keeps the cached images.
+      if (_doc != null && _doc!.previewRevision != doc.previewRevision) {
+        api.previewRevisions[doc.uuid] = doc.previewRevision;
+      }
       setState(() {
         _doc = doc;
         _events = events;
@@ -872,6 +878,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             api: ref.read(apiProvider),
             uuid: doc.uuid,
             version: previewVersion,
+            revision: ref.read(apiProvider).previewRevisions[doc.uuid],
           )
         : _PreviewPager(
             api: ref.read(apiProvider),
@@ -2047,11 +2054,14 @@ class _PdfPreview extends StatefulWidget {
   final ApiClient api;
   final String uuid;
   final DocumentVersion version;
+  // ApiClient.previewRevisions entry: a change refetches the same version.
+  final int? revision;
 
   const _PdfPreview({
     required this.api,
     required this.uuid,
     required this.version,
+    required this.revision,
   });
 
   @override
@@ -2072,7 +2082,9 @@ class _PdfPreviewState extends State<_PdfPreview> {
   @override
   void didUpdateWidget(_PdfPreview old) {
     super.didUpdateWidget(old);
-    if (old.uuid != widget.uuid || old.version.number != widget.version.number) {
+    if (old.uuid != widget.uuid ||
+        old.version.number != widget.version.number ||
+        old.revision != widget.revision) {
       setState(() {
         _bytes = null;
         _failed = false;
@@ -2121,7 +2133,9 @@ class _PdfPreviewState extends State<_PdfPreview> {
           ? const Center(child: CircularProgressIndicator())
           : PdfViewer.data(
               _bytes!,
-              sourceName: '${widget.uuid}/v${widget.version.number}',
+              // pdfrx shares loaded documents by sourceName.
+              sourceName:
+                  '${widget.uuid}/v${widget.version.number}/r${widget.revision}',
               controller: _controller,
               params: PdfViewerParams(
                 backgroundColor: scheme.surfaceContainerHighest,
@@ -2199,9 +2213,12 @@ class _PreviewPagerState extends State<_PreviewPager> {
                     ),
                     headers: widget.api.authHeaders,
                     fit: BoxFit.contain,
-                    // Lazy pages may take ~1s to render server-side.
-                    loadingBuilder: (context, child, progress) =>
-                        progress == null
+                    // Lazy pages may take ~1s to render server-side, ODT/ODS
+                    // a few seconds after an edit (LibreOffice). No bytes
+                    // arrive meanwhile, so wait for the decoded frame, not
+                    // for download progress.
+                    frameBuilder: (context, child, frame, wasSync) =>
+                        wasSync || frame != null
                         ? child
                         : const Center(child: CircularProgressIndicator()),
                     errorBuilder: (context, e, st) => Column(

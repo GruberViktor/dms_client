@@ -374,13 +374,26 @@ class ApiClient {
 
   // ---- Previews ----
 
+  /// Cache-busting `r=` value per document uuid, set by the detail screen
+  /// when a reload shows a changed [Document.previewRevision]. The server
+  /// sends previews as no-cache, but the preview URLs stay the same across
+  /// edits and Flutter's ImageCache is keyed by URL alone.
+  final previewRevisions = <String, int>{};
+
+  String _revisionParam(String uuid) {
+    final r = previewRevisions[uuid];
+    return r == null ? '' : '&r=$r';
+  }
+
   /// URL for the latest-visible-version preview (list thumbnails).
   String documentPreviewUrl(String uuid, {String size = 'thumb', int page = 1}) =>
-      '$baseUrl/documents/$uuid/preview/?size=$size&page=$page';
+      '$baseUrl/documents/$uuid/preview/?size=$size&page=$page'
+      '${_revisionParam(uuid)}';
 
   String versionPreviewUrl(String uuid, int number,
           {String size = 'preview', int page = 1}) =>
-      '$baseUrl/documents/$uuid/versions/$number/preview?size=$size&page=$page';
+      '$baseUrl/documents/$uuid/versions/$number/preview?size=$size&page=$page'
+      '${_revisionParam(uuid)}';
 
   // ---- Search ----
 

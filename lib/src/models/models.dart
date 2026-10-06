@@ -1,6 +1,8 @@
 /// Domain models for the DMS API (see client-specification.md §3/§4).
 library;
 
+import 'dart:convert';
+
 class Paginated<T> {
   final int count;
   final String? next;
@@ -339,6 +341,19 @@ class Document {
         versions: ((json['versions'] as List?) ?? const [])
             .map((e) => DocumentVersion.fromJson(e as Map<String, dynamic>))
             .toList(),
+      );
+
+  /// Changes whenever the server's renderings (preview images, `view/pdf`)
+  /// may have changed: file replaced, version uploaded/released/hidden,
+  /// title/type/metadata edited. Extraction progress does not count, so the
+  /// OCR poll does not refetch previews. Detail rows only (list rows carry no
+  /// versions).
+  int get previewRevision => Object.hash(
+        title,
+        documentType,
+        jsonEncode(metadata),
+        Object.hashAll(versions.map((v) => Object.hash(v.number,
+            v.checksumSha256, v.approvalStatus, v.releasedAt, v.isHidden))),
       );
 
   /// Newest visible *released* version — "the document". Pending versions

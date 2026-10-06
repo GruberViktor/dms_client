@@ -252,6 +252,32 @@ void main() {
       expect(doc.latestPendingVersion?.number, 1);
     });
 
+    test('previewRevision follows renderings, not extraction progress', () {
+      int rev(Map<String, dynamic> v, {Map meta = const {'a': '1'}}) =>
+          Document.fromJson({
+            'uuid': 'u1',
+            'title': 'T',
+            'document_type': 'invoice',
+            'date_added': '2026-07-20T10:00:00Z',
+            'added_by': 'alice',
+            'metadata': meta,
+            'versions': [v],
+          }).previewRevision;
+      final base = rev(versionJson(1, approval: 'pending'));
+      expect(
+        rev({...versionJson(1, approval: 'pending'), 'extraction_status': 'running'}),
+        base,
+      );
+      expect(
+        rev({...versionJson(1, approval: 'pending'), 'checksum_sha256': 'new'}),
+        isNot(base),
+      );
+      expect(rev(versionJson(1, approval: 'released', releasedBy: 'bob')),
+          isNot(base));
+      expect(rev(versionJson(1, approval: 'pending'), meta: {'a': '2'}),
+          isNot(base));
+    });
+
     test('VersionEvent parses approval fields and proposed_diff', () {
       final e = TimelineEvent.fromJson({
         'kind': 'version',

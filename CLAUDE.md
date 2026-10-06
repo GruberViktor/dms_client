@@ -89,6 +89,10 @@ token) in flutter_secure_storage.
   to the icon. Other formats, and PDF fetch failures, use the server preview
   images (`/preview/?size=thumb|preview&page=N`, token header); 404 →
   mime-type icon fallback. List thumbnails always use the server previews.
+  Preview URLs never change across edits (server sends no-cache + ETag), so
+  when a detail reload shows a changed `Document.previewRevision` it lands in
+  `ApiClient.previewRevisions` → `&r=` on every preview URL of that uuid and
+  a `view/pdf` refetch.
 - Compliance mode: hide delete/replace-file actions, show the lock badge;
   archive stays available.
 - Branding: display name "LUVI Docs" (Android label, GTK/Win32 window title,
