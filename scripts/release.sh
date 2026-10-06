@@ -3,7 +3,8 @@
 # LUVI Docs — build, package and publish a GitHub release.
 #
 #   scripts/release.sh                 release the version from pubspec.yaml
-#   scripts/release.sh 1.0.1           release an explicit version
+#   scripts/release.sh patch|minor|major  bump pubspec.yaml, commit, release
+#   scripts/release.sh 1.0.1           bump to an explicit version, commit, release
 #   scripts/release.sh --draft         publish as a draft to review first
 #   scripts/release.sh --skip-build    reuse the existing build/ output
 #   scripts/release.sh --retag         move an existing tag to HEAD (force push)
@@ -90,23 +91,35 @@ log "Preflight"
 command -v flutter >/dev/null || die "flutter not on PATH"
 command -v gh >/dev/null      || die "gh not on PATH"
 command -v tar >/dev/null     || die "tar not on PATH"
+command -v unzip >/dev/null   || die "unzip not on PATH"
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated — run: gh auth login"
-
-PUBSPEC_VERSION="$(sed -n 's/^version: *\([0-9][^+]*\).*/\1/p' pubspec.yaml | head -1)"
-[ -n "$PUBSPEC_VERSION" ] || die "could not read version from pubspec.yaml"
-
-if [ -z "$VERSION" ]; then
-    VERSION="$PUBSPEC_VERSION"
-elif [ "$VERSION" != "$PUBSPEC_VERSION" ]; then
-    warn "requested $VERSION but pubspec.yaml says $PUBSPEC_VERSION — bump pubspec first?"
-    confirm "Continue anyway?" || exit 1
-fi
-
-TAG="v$VERSION"
 
 if [ "$ALLOW_DIRTY" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
     git status --short
     die "working tree is not clean (use --allow-dirty to override)"
+fi
+
+PUBSPEC_VERSION="$(sed -n 's/^version: *\([0-9][^+]*\).*/\1/p' pubspec.yaml | head -1)"
+PUBSPEC_BUILD="$(sed -n 's/^version: *[^+]*+\([0-9]*\).*/\1/p' pubspec.yaml | head -1)"
+[ -n "$PUBSPEC_VERSION" ] || die "could not read version from pubspec.yaml"
+
+IFS=. read -r V_MAJOR V_MINOR V_PATCH <<<"$PUBSPEC_VERSION"
+case "$VERSION" in
+    "")    VERSION="$PUBSPEC_VERSION" ;;
+    major) VERSION="$((V_MAJOR + 1)).0.0" ;;
+    minor) VERSION="$V_MAJOR.$((V_MINOR + 1)).0" ;;
+    patch) VERSION="$V_MAJOR.$V_MINOR.$((V_PATCH + 1))" ;;
+esac
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid version: $VERSION"
+
+TAG="v$VERSION"
+
+if [ "$VERSION" != "$PUBSPEC_VERSION" ]; then
+    git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && die "$TAG already exists"
+    NEW_BUILD="$(( ${PUBSPEC_BUILD:-0} + 1 ))"
+    confirm "Bump pubspec.yaml $PUBSPEC_VERSION+${PUBSPEC_BUILD:-0} -> $VERSION+$NEW_BUILD and commit?" || exit 1
+    sed -i "s/^version: .*/version: $VERSION+$NEW_BUILD/" pubspec.yaml
+    git commit --quiet -m "Bump version to $VERSION" pubspec.yaml
 fi
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -188,6 +201,8 @@ log "Packaging Linux tarball"
 
 BUNDLE="build/linux/x64/release/bundle"
 [ -x "$BUNDLE/dms_client" ] || die "$BUNDLE/dms_client not found — run without --skip-build"
+grep -qF "\"version\":\"$VERSION\"" "$BUNDLE/data/flutter_assets/version.json" \
+    || die "$BUNDLE is not built for $VERSION — run without --skip-build"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -207,15 +222,23 @@ trap - EXIT
 log "Collecting APKs"
 
 APK_DIR="build/app/outputs/flutter-apk"
+
+# versionName sits UTF-16 encoded in the binary manifest; dropping the NULs makes it greppable
+check_apk_version() {
+    unzip -p "$1" AndroidManifest.xml | tr -d '\0' | grep -aqF "$VERSION" \
+        || die "$1 is not built for $VERSION — run without --skip-build"
+}
 found_apk=0
 if [ "$UNIVERSAL_APK" -eq 1 ]; then
     [ -f "$APK_DIR/app-release.apk" ] || die "$APK_DIR/app-release.apk not found"
+    check_apk_version "$APK_DIR/app-release.apk"
     cp "$APK_DIR/app-release.apk" "$DIST_DIR/dms_client-$VERSION-android.apk"
     found_apk=1
 else
     for abi in arm64-v8a armeabi-v7a x86_64; do
         src="$APK_DIR/app-$abi-release.apk"
         if [ -f "$src" ]; then
+            check_apk_version "$src"
             cp "$src" "$DIST_DIR/dms_client-$VERSION-android-$abi.apk"
             found_apk=1
         else
