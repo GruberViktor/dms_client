@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import '../state/document_feed.dart';
 import '../state/session.dart';
 import '../state/watches.dart';
 import '../util/format.dart';
@@ -87,6 +88,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   final _queryFocus = FocusNode();
   final _showClear = ValueNotifier<bool>(false);
   Timer? _debounce;
+  Timer? _changeDebounce;
 
   // Browsing fills `_docs`, searching fills `_hits`; only one is live at a
   // time (see `_filters.searching`). Both hold exactly the current page.
@@ -113,6 +115,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _changeDebounce?.cancel();
     _queryCtrl.dispose();
     _queryFocus.dispose();
     _showClear.dispose();
@@ -351,6 +354,15 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Any change can move a document into or out of the current page, so
+    // every event reloads it (the page stays visible meanwhile).
+    // ponytail: reloads on all changes server-wide; filter by the uuids on
+    // the page plus create/type_change if busy servers make this noisy.
+    ref.listen(documentFeedProvider, (_, next) {
+      if (next.value is! DocumentChange) return;
+      _changeDebounce?.cancel();
+      _changeDebounce = Timer(const Duration(seconds: 1), _reload);
+    });
     return LayoutBuilder(
       builder: (context, constraints) =>
           _build(context, wide: constraints.maxWidth >= _sidebarBreakpoint),

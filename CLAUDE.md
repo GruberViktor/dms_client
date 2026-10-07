@@ -29,6 +29,19 @@ token) in flutter_secure_storage.
 - `lib/src/state/notifications.dart` + `state/watches.dart` — unread inbox
   count polled every 45 s (no push channel exists) and the session-cached
   watch set with optimistic document/type toggles.
+- `lib/src/state/document_feed.dart` — live document feed: one SSE
+  connection to `/events/` per session (`parseDocumentFeed` in
+  `api_client.dart`), reconnect after 5 s, then a `DocumentChange.resync`
+  (uuid null) because the server keeps no history. Detail screen reloads on
+  its uuid (500 ms debounce), the list reloads its page on any change (1 s).
+  Extraction polling stays as the fallback while disconnected.
+- `lib/src/state/editors.dart` — editing notices: `EditingAnnouncement`
+  (PUT `…/editing/` now + every 30 s, DELETE on stop) runs while the
+  metadata edit screen is open and for the life of a round-trip edit
+  session; `documentEditorsProvider` collects other users'
+  `document_editing` events (dropped after `expires_in` unless repeated),
+  shown by `widgets/editors_banner.dart` on detail + edit screens. Notice
+  only — the server does not lock.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
   document list (compact search field + type dropdown, type tree as an
   inline collapsible sidebar ≥760px content width / overlay drawer below,

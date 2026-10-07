@@ -14,12 +14,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import '../state/document_feed.dart';
 import '../state/edit_sessions.dart';
 import '../state/permissions.dart';
 import '../state/session.dart';
 import '../state/watches.dart';
 import '../util/format.dart';
 import '../widgets/common.dart';
+import '../widgets/editors_banner.dart';
 import '../widgets/timeline.dart';
 import 'edit_document_screen.dart';
 
@@ -39,6 +41,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   List<DocumentComment>? _comments;
   Object? _error;
   Timer? _pollTimer;
+  Timer? _changeDebounce;
   bool _busy = false;
   // Versions whose release hit the four-eyes 403 (`approval_required`): the
   // button stays visible but disabled with a hint — unlike a plain 403,
@@ -54,6 +57,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _changeDebounce?.cancel();
     super.dispose();
   }
 
@@ -738,6 +742,17 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Someone (maybe we) changed this document: reload. Debounced, because
+    // one upload sends create + version_upload + extraction_done.
+    ref.listen(documentFeedProvider, (_, next) {
+      final change = next.value;
+      if (change is! DocumentChange ||
+          (change.uuid != null && change.uuid != widget.uuid)) {
+        return;
+      }
+      _changeDebounce?.cancel();
+      _changeDebounce = Timer(const Duration(milliseconds: 500), _load);
+    });
     final doc = _doc;
     if (_error != null) {
       return Scaffold(
@@ -772,6 +787,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final infoColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        EditorsBanner(uuid: doc.uuid),
         if (editSession != null) ...[
           _EditSessionBanner(
             session: editSession,

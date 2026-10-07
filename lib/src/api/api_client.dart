@@ -548,6 +548,23 @@ class ApiClient {
         .toList();
   }
 
+  // ---- Live change feed ----
+
+  /// Opens `/events/` (Server-Sent Events). Completes when the server has
+  /// answered; the stream then emits each feed event and errors when the
+  /// connection drops. The server sends a keepalive every
+  /// 20 s, so the 60 s receive timeout (applied per chunk) detects a dead link.
+  Future<Stream<FeedEvent>> documentFeed() async {
+    final res = await _request<ResponseBody>('GET', '/events/',
+        responseType: ResponseType.stream);
+    return parseDocumentFeed(res.data!.stream);
+  }
+
+  /// Editing notice: PUT starts (repeat within 30 s), DELETE ends it.
+  Future<void> setEditing(String uuid, bool editing) async {
+    await _request(editing ? 'PUT' : 'DELETE', '/documents/$uuid/editing/');
+  }
+
   // ---- Admin: document types ----
 
   Future<DocumentType> createDocumentType(Map<String, dynamic> body) async {
@@ -657,5 +674,32 @@ class ApiClient {
 
   Future<void> deleteStorage(int id) async {
     await _request('DELETE', '/storages/$id/');
+  }
+}
+
+/// Server-Sent Events parser for `/events/`: events end at a blank line,
+/// comment lines (`: keepalive`) and `retry:` are ignored.
+Stream<FeedEvent> parseDocumentFeed(Stream<List<int>> bytes) async* {
+  String? event;
+  final data = StringBuffer();
+  // bind, not bytes.transform(utf8.decoder): Dio delivers Stream<Uint8List>,
+  // and transform() would demand a StreamTransformer<Uint8List, …>.
+  await for (final line
+      in utf8.decoder.bind(bytes).transform(const LineSplitter())) {
+    if (line.isEmpty) {
+      if (event == 'document_changed' || event == 'document_editing') {
+        final json = jsonDecode(data.toString()) as Map<String, dynamic>;
+        yield event == 'document_changed'
+            ? DocumentChange(
+                json['document'] as String, json['action'] as String)
+            : DocumentEditing.fromJson(json);
+      }
+      event = null;
+      data.clear();
+    } else if (line.startsWith('event:')) {
+      event = line.substring(6).trim();
+    } else if (line.startsWith('data:')) {
+      data.write(line.substring(5).trim());
+    }
   }
 }

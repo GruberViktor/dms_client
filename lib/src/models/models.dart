@@ -980,6 +980,46 @@ class UserSuggestion {
       );
 }
 
+/// One event of the live document feed (`/events/`).
+sealed class FeedEvent {}
+
+/// `document_changed`. [uuid] is null for a resync: the feed reconnected
+/// after a gap in which events may have been lost, so everything on screen
+/// must be reloaded.
+class DocumentChange extends FeedEvent {
+  final String? uuid;
+  final String action; // audit action code, e.g. comment_add
+
+  DocumentChange(this.uuid, this.action);
+
+  // Not const: two resyncs in a row must still be two distinct events.
+  DocumentChange.resync() : this(null, 'resync');
+}
+
+/// `document_editing`: [user] started ([editing] true, valid for
+/// [expiresIn] unless repeated) or stopped editing [uuid].
+class DocumentEditing extends FeedEvent {
+  final String uuid;
+  final String user;
+  final bool editing;
+  final Duration expiresIn;
+
+  DocumentEditing({
+    required this.uuid,
+    required this.user,
+    required this.editing,
+    required this.expiresIn,
+  });
+
+  factory DocumentEditing.fromJson(Map<String, dynamic> json) =>
+      DocumentEditing(
+        uuid: json['document'] as String,
+        user: json['user'] as String,
+        editing: _asBool(json['editing']),
+        expiresIn: Duration(seconds: (json['expires_in'] as num).toInt()),
+      );
+}
+
 class CurrentUser {
   final int id;
   final String username;

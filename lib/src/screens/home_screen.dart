@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../state/editors.dart';
 import '../state/notifications.dart';
 import '../state/session.dart';
 import 'admin/admin_screen.dart';
@@ -57,6 +58,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // No push channel exists — the badge count is polled (~45 s) while
     // logged in (notifications hand-off §1).
     final unread = ref.watch(unreadNotificationsProvider);
+    // Collect editing notices from login on, not only once a banner exists.
+    ref.listen(documentEditorsProvider, (_, _) {});
     final inboxIcon = Badge.count(
       count: unread,
       isLabelVisible: unread > 0,

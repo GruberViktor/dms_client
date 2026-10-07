@@ -308,4 +308,12 @@ fields, create groups + users, and PUT ACLs on the type roots.
 
 - No user/group management API (Django admin only for now).
 - No "effective permissions for me" endpoint (see §5).
-- No websocket/event push — polling only.
+- Push is one-way and fire-and-forget: `GET /events/` (Server-Sent Events)
+  sends `document_changed` `{"document": uuid, "action": audit code}` for
+  every change to a document the caller may view (not for view/download),
+  with a `: keepalive` comment every 20 s. No history: after a reconnect,
+  reload what is on screen. Inbox state is not pushed — keep polling it.
+- Editing notice (no lock): PUT `/documents/{uuid}/editing/` while editing,
+  repeated at least every 30 s, DELETE when done. The feed relays it as
+  `document_editing` `{"document", "user", "editing", "expires_in"}`; drop
+  an editor not repeated within `expires_in` (60 s).
