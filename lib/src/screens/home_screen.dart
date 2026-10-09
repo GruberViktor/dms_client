@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../state/app_update.dart';
 import '../state/deep_links.dart';
 import '../state/editors.dart';
 import '../state/notifications.dart';
@@ -21,6 +23,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _tab = 0;
+  bool _updateDismissed = false;
 
   // Each tab gets its own nested Navigator so that pushing a detail / browser
   // route stays inside the content area — the rail (or bottom nav) persists
@@ -152,7 +155,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Route the system/back button to the active tab's nested Navigator first,
     // so it pops the pushed detail route rather than exiting the shell.
-    final content = PopScope(
+    final tabs = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
@@ -160,6 +163,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       },
       child: body,
     );
+    final update = ref.watch(appUpdateProvider).value;
+    final content = update == null || _updateDismissed
+        ? tabs
+        : Column(
+            children: [
+              MaterialBanner(
+                leading: const Icon(Icons.system_update_outlined),
+                content: Text('LUVI Docs ${update.version} ist verfügbar.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => setState(() => _updateDismissed = true),
+                    child: const Text('Später'),
+                  ),
+                  TextButton(
+                    onPressed: () => launchUrl(
+                      Uri.parse(update.url),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    child: const Text('Herunterladen'),
+                  ),
+                ],
+              ),
+              Expanded(child: tabs),
+            ],
+          );
 
     if (wide) {
       return Scaffold(

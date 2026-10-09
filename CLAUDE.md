@@ -48,6 +48,10 @@ token) in flutter_secure_storage.
   instance (a second launch forwards its link and raises the window), the
   scheme is registered by `linux/packaging/install.sh`. Android: intent filter
   in the manifest. Server notification emails carry these links.
+- `lib/src/state/app_update.dart` — once per run, asks the GitHub API for
+  the latest release (repo must be public, no token) and compares with
+  `package_info_plus`; a newer tag shows a banner in the home shell that
+  opens the release page. Failures are silent.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
   document list (compact search field + type dropdown, type tree as an
   inline collapsible sidebar ≥760px content width / overlay drawer below,
