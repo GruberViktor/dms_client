@@ -433,6 +433,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                   ),
                 ),
           body: DropTarget(
+            // Off in a hidden tab or under a pushed route.
+            enable: TickerMode.valuesOf(context).enabled,
             onDragEntered: (_) => setState(() => _dragging = true),
             onDragExited: (_) => setState(() => _dragging = false),
             onDragDone: _onDrop,

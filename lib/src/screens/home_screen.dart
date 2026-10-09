@@ -150,7 +150,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final body = IndexedStack(
       index: _tab,
-      children: [for (final d in destinations) _tabNavigator(d.label, d.root)],
+      // Hidden tabs stay mounted; TickerMode off marks them inactive so their
+      // DropTargets ignore drops (desktop_drop only checks bounds).
+      children: [
+        for (final (i, d) in destinations.indexed)
+          TickerMode(enabled: i == _tab, child: _tabNavigator(d.label, d.root)),
+      ],
     );
 
     // Route the system/back button to the active tab's nested Navigator first,
