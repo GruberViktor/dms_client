@@ -239,8 +239,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   /// toggle is optimistic, the notifier reverts on failure.
   Future<void> _toggleWatch() async {
     try {
-      final on =
-          await ref.read(watchesProvider.notifier).toggleDocument(_doc!.uuid);
+      final on = await ref
+          .read(watchesProvider.notifier)
+          .toggleDocument(_doc!.uuid);
       if (mounted) {
         showSnack(
           context,
@@ -286,6 +287,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   }) async {
     final picked = file ?? await _pickMultipart();
     if (picked == null || !mounted) return;
+    final pendingBefore = _doc!.latestPendingVersion?.number;
     setState(() => _busy = true);
     try {
       // Whether the version needs a release is the server's call — read it
@@ -296,7 +298,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       if (mounted) {
         showSnack(
           context,
-          v.isPending
+          v.number == pendingBefore
+              ? 'Datei der Version ${v.number} ersetzt — wartet auf Freigabe.'
+              : v.isPending
               ? 'Version ${v.number} hochgeladen — wartet auf Freigabe.'
               : 'Neue Version hochgeladen.',
         );
@@ -499,13 +503,16 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
 
   Future<bool> _editComment(DocumentComment c, String body) async {
     try {
-      final updated =
-          await ref.read(apiProvider).patchComment(_doc!.uuid, c.id, body);
+      final updated = await ref
+          .read(apiProvider)
+          .patchComment(_doc!.uuid, c.id, body);
       if (!mounted) return true;
-      setState(() => _comments = [
-            for (final x in _comments ?? const <DocumentComment>[])
-              x.id == c.id ? updated : x,
-          ]);
+      setState(
+        () => _comments = [
+          for (final x in _comments ?? const <DocumentComment>[])
+            x.id == c.id ? updated : x,
+        ],
+      );
       _refreshEvents();
       return true;
     } on ApiException catch (e) {
@@ -551,8 +558,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       }
     }
     if (!mounted) return;
-    setState(() => _comments =
-        [...?_comments]..removeWhere((x) => x.id == c.id));
+    setState(
+      () => _comments = [...?_comments]..removeWhere((x) => x.id == c.id),
+    );
     _refreshEvents();
   }
 
@@ -641,11 +649,19 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   }
 
   Future<void> _editUploadNewVersion() async {
+    final pendingBefore = _doc!.latestPendingVersion?.number;
     try {
       await ref
           .read(editSessionsProvider.notifier)
           .uploadAsNewVersion(_doc!.uuid);
-      if (mounted) showSnack(context, 'Als neue Version hochgeladen.');
+      if (mounted) {
+        showSnack(
+          context,
+          pendingBefore != null
+              ? 'Datei der Version $pendingBefore ersetzt.'
+              : 'Als neue Version hochgeladen.',
+        );
+      }
       await _load();
     } on ApiException catch (e) {
       if (e.isForbidden) _recordDenied('upload_version');
@@ -680,7 +696,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     // §7 "replace resets release": warn when approvals plausibly apply. The
     // effective mode is resolved client-side and only feeds this warning —
     // the response's approval_status is what we act on.
-    final approvalGated = effectiveApprovalMode(
+    final approvalGated =
+        effectiveApprovalMode(
           ref.read(documentTypesBySlugProvider),
           _doc!.documentType,
         ) !=
@@ -694,9 +711,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           'Um den Verlauf zu erhalten, laden Sie stattdessen eine neue '
           'Version hoch.'
           '${approvalGated && !v.isPending ? '\n\nDieser Typ erfordert eine '
-              'Freigabe: Die ersetzte Version fällt zurück auf „wartet auf '
-              'Freigabe“, und das Dokument zeigt bis zur erneuten Freigabe '
-              'wieder den zuvor freigegebenen Inhalt.' : ''}',
+                    'Freigabe: Die ersetzte Version fällt zurück auf „wartet auf '
+                    'Freigabe“, und das Dokument zeigt bis zur erneuten Freigabe '
+                    'wieder den zuvor freigegebenen Inhalt.' : ''}',
         ),
         actions: [
           TextButton(
@@ -721,8 +738,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           context,
           replaced.isPending
               ? 'Datei ersetzt — Version ${replaced.number} wartet auf '
-                  'Freigabe; bis dahin zeigt das Dokument den zuvor '
-                  'freigegebenen Inhalt.'
+                    'Freigabe; bis dahin zeigt das Dokument den zuvor '
+                    'freigegebenen Inhalt.'
               : 'Datei ersetzt.',
         );
       }
@@ -794,6 +811,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             canUpload: canUpload,
             approvalGated:
                 effectiveApprovalMode(bySlug, doc.documentType) != 'none',
+            pendingNumber: pending?.number,
             onUploadNewVersion: _editUploadNewVersion,
             onReplaceFile: _editReplaceFile,
             onStop: () =>
@@ -816,8 +834,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         _VersionsCard(
           doc: doc,
           onDownload: _busy ? null : _downloadAndOpen,
-          onDownloadPdf:
-              _busy ? null : (v) => _downloadAndOpen(v, asPdf: true),
+          onDownloadPdf: _busy ? null : (v) => _downloadAndOpen(v, asPdf: true),
           onOpenEdit: (_busy || !_isDesktop) ? null : _openAndEdit,
           onUploadVersion: (_busy || !canUpload)
               ? null
@@ -852,10 +869,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Verlauf',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text('Verlauf', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),
                 if (_events == null)
                   const Text('Verlauf nicht verfügbar.')
@@ -889,7 +903,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         : markdownSource != null && markdownSource.trim().isNotEmpty
         ? _MarkdownPreview(source: markdownSource)
         : (isPdfMime(previewVersion.mimeType) ||
-                canDownloadAsPdf(previewVersion.mimeType))
+              canDownloadAsPdf(previewVersion.mimeType))
         ? _PdfPreview(
             api: ref.read(apiProvider),
             uuid: doc.uuid,
@@ -916,7 +930,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: watching ? 'Nicht mehr beobachten' : 'Änderungen beobachten',
+            tooltip: watching
+                ? 'Nicht mehr beobachten'
+                : 'Änderungen beobachten',
             icon: Icon(
               watching
                   ? Icons.notifications_active
@@ -940,8 +956,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             IconButton(
               tooltip: 'Als PDF herunterladen',
               icon: const Icon(Icons.picture_as_pdf_outlined),
-              onPressed:
-                  _busy ? null : () => _downloadAndOpen(current, asPdf: true),
+              onPressed: _busy
+                  ? null
+                  : () => _downloadAndOpen(current, asPdf: true),
             ),
           IconButton(
             tooltip: doc.archived ? 'Dearchivieren' : 'Archivieren',
@@ -1199,8 +1216,9 @@ class _CommentsCardState extends State<_CommentsCard> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final comments = widget.comments;
-    final muted =
-        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1227,7 +1245,9 @@ class _CommentsCardState extends State<_CommentsCard> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _editingId == c.id ? _editor(c) : _tile(c),
                 ),
-            if (widget.canCompose) _composer() else ...[
+            if (widget.canCompose)
+              _composer()
+            else ...[
               const SizedBox(height: 4),
               Text(
                 'Sie dürfen bei diesem Dokumenttyp nicht kommentieren.',
@@ -1243,8 +1263,9 @@ class _CommentsCardState extends State<_CommentsCard> {
   Widget _tile(DocumentComment c) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final muted =
-        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1254,23 +1275,25 @@ class _CommentsCardState extends State<_CommentsCard> {
           children: [
             Expanded(
               child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: c.author,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  TextSpan(
-                    text: '  ${formatDateTime(c.createdAt)}',
-                    style: muted,
-                  ),
-                  if (c.isEdited)
+                TextSpan(
+                  children: [
                     TextSpan(
-                      text: c.editedBy != null && c.editedBy != c.author
-                          ? ' · bearbeitet von ${c.editedBy}'
-                          : ' · bearbeitet',
-                      style: muted?.copyWith(fontStyle: FontStyle.italic),
+                      text: c.author,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                ]),
+                    TextSpan(
+                      text: '  ${formatDateTime(c.createdAt)}',
+                      style: muted,
+                    ),
+                    if (c.isEdited)
+                      TextSpan(
+                        text: c.editedBy != null && c.editedBy != c.author
+                            ? ' · bearbeitet von ${c.editedBy}'
+                            : ' · bearbeitet',
+                        style: muted?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                  ],
+                ),
                 style: theme.textTheme.bodyMedium,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1283,9 +1306,9 @@ class _CommentsCardState extends State<_CommentsCard> {
                 onPressed: _sending
                     ? null
                     : () => setState(() {
-                          _editingId = c.id;
-                          _editCtrl.text = c.body;
-                        }),
+                        _editingId = c.id;
+                        _editCtrl.text = c.body;
+                      }),
               ),
             if (c.canDelete)
               IconButton(
@@ -1301,10 +1324,7 @@ class _CommentsCardState extends State<_CommentsCard> {
         Text.rich(
           _withMentionStyle(
             c.body,
-            TextStyle(
-              color: scheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
+            TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
           ),
           style: theme.textTheme.bodyMedium,
         ),
@@ -1327,8 +1347,9 @@ class _CommentsCardState extends State<_CommentsCard> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             TextButton(
-              onPressed:
-                  _sending ? null : () => setState(() => _editingId = null),
+              onPressed: _sending
+                  ? null
+                  : () => setState(() => _editingId = null),
               child: const Text('Abbrechen'),
             ),
             const SizedBox(width: 8),
@@ -1387,7 +1408,8 @@ TextSpan _withMentionStyle(String body, TextStyle mentionStyle) {
   final children = <TextSpan>[];
   var last = 0;
   for (final m in _mentionRe.allMatches(body)) {
-    if (m.start > last) children.add(TextSpan(text: body.substring(last, m.start)));
+    if (m.start > last)
+      children.add(TextSpan(text: body.substring(last, m.start)));
     children.add(TextSpan(text: m.group(0), style: mentionStyle));
     last = m.end;
   }
@@ -1483,8 +1505,7 @@ class _MentionFieldState extends State<_MentionField> {
     final replaced = '@${u.username} ';
     widget.controller.value = TextEditingValue(
       text: value.text.replaceRange(_tokenStart, cursor, replaced),
-      selection:
-          TextSelection.collapsed(offset: _tokenStart + replaced.length),
+      selection: TextSelection.collapsed(offset: _tokenStart + replaced.length),
     );
     _clear();
   }
@@ -1552,6 +1573,8 @@ class _EditSessionBanner extends StatelessWidget {
   final bool canUpload;
   // Approvals may apply to this type (client-side resolved, warning only).
   final bool approvalGated;
+  // Number of the version awaiting release; every upload replaces its file.
+  final int? pendingNumber;
   final VoidCallback onUploadNewVersion;
   final VoidCallback onReplaceFile;
   final VoidCallback onStop;
@@ -1560,6 +1583,7 @@ class _EditSessionBanner extends StatelessWidget {
     required this.session,
     required this.canUpload,
     required this.approvalGated,
+    required this.pendingNumber,
     required this.onUploadNewVersion,
     required this.onReplaceFile,
     required this.onStop,
@@ -1617,15 +1641,19 @@ class _EditSessionBanner extends StatelessWidget {
             if (changed) ...[
               const SizedBox(height: 8),
               Text(
-                (session.compliance
+                (pendingNumber != null
+                    ? 'Version $pendingNumber wartet auf Freigabe: Die Änderung '
+                          'ersetzt deren Datei, eine weitere Version ist bis zur '
+                          'Freigabe nicht möglich.'
+                    : (session.compliance
                         ? 'Dieses Dokument unterliegt der Aufbewahrungspflicht: '
                               'Die Änderung kann nur als Version '
                               '${session.versionNumber + 1} hochgeladen werden.'
                         : 'Änderung als Version '
                               '${session.versionNumber + 1} hochladen oder die '
                               'Datei der Version ${session.versionNumber} direkt '
-                              'überschreiben.') +
-                    (approvalGated
+                              'überschreiben.')) +
+                    (pendingNumber == null && approvalGated
                         ? ' Dieser Typ erfordert eine Freigabe — das Ergebnis '
                               'wartet auf Freigabe, bevor es zum Dokument wird.'
                         : ''),
@@ -1636,16 +1664,23 @@ class _EditSessionBanner extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  // the server routes this upload into the pending version
                   FilledButton.icon(
                     onPressed: canUpload ? onUploadNewVersion : null,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: Text('Als v${session.versionNumber + 1} hochladen'),
+                    label: Text(
+                      pendingNumber != null
+                          ? 'Datei in v$pendingNumber ersetzen'
+                          : 'Als v${session.versionNumber + 1} hochladen',
+                    ),
                   ),
-                  if (!session.compliance)
+                  if (pendingNumber == null && !session.compliance)
                     OutlinedButton.icon(
                       onPressed: canUpload ? onReplaceFile : null,
                       icon: const Icon(Icons.find_replace, size: 18),
-                      label: Text('Datei in v${session.versionNumber} ersetzen'),
+                      label: Text(
+                        'Datei in v${session.versionNumber} ersetzen',
+                      ),
                     ),
                 ],
               ),
@@ -1694,9 +1729,11 @@ class _PendingReleaseBanner extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.pending_actions,
-                    size: 18,
-                    color: dark ? Colors.amber.shade200 : Colors.amber.shade900),
+                Icon(
+                  Icons.pending_actions,
+                  size: 18,
+                  color: dark ? Colors.amber.shade200 : Colors.amber.shade900,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -1712,11 +1749,11 @@ class _PendingReleaseBanner extends StatelessWidget {
             Text(
               noReleasedContent
                   ? 'Derzeit existiert keine freigegebene Version — das '
-                      'Dokument hat keinen wirksamen Inhalt, bis diese Version '
-                      'freigegeben wird.'
+                        'Dokument hat keinen wirksamen Inhalt, bis diese Version '
+                        'freigegeben wird.'
                   : 'Das Dokument zeigt weiterhin den zuvor freigegebenen '
-                      'Inhalt. Die vorgeschlagenen Änderungen finden Sie im '
-                      'Verlauf weiter unten.',
+                        'Inhalt. Die vorgeschlagenen Änderungen finden Sie im '
+                        'Verlauf weiter unten.',
               style: theme.textTheme.bodySmall,
             ),
             if (canRelease) ...[
@@ -1734,8 +1771,9 @@ class _PendingReleaseBanner extends StatelessWidget {
                       child: Text(
                         'Vier-Augen-Prinzip: Eine andere Person muss '
                         'freigeben.',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                 ],
@@ -1794,11 +1832,17 @@ class _VersionsCard extends StatelessWidget {
                 Expanded(
                   child: Text('Versionen', style: theme.textTheme.titleMedium),
                 ),
+                // While a version awaits release the server replaces its file
+                // instead of adding a further version.
                 if (onUploadVersion != null)
                   FilledButton.tonalIcon(
                     onPressed: onUploadVersion,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('Neue Version'),
+                    label: Text(
+                      doc.latestPendingVersion != null
+                          ? 'Datei in v${doc.latestPendingVersion!.number} ersetzen'
+                          : 'Neue Version',
+                    ),
                   ),
               ],
             ),
@@ -1820,8 +1864,9 @@ class _VersionsCard extends StatelessWidget {
                         'v${v.number} · ${v.originalFilename}',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          decoration:
-                              v.isHidden ? TextDecoration.lineThrough : null,
+                          decoration: v.isHidden
+                              ? TextDecoration.lineThrough
+                              : null,
                           color: v.isHidden ? theme.colorScheme.outline : null,
                           fontWeight: v.number == currentNumber
                               ? FontWeight.w600
@@ -1829,11 +1874,6 @@ class _VersionsCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (!v.isHidden && v.isPending)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 6),
-                        child: PendingReleaseBadge(),
-                      ),
                   ],
                 ),
                 subtitle: Text(
@@ -1855,7 +1895,7 @@ class _VersionsCard extends StatelessWidget {
                       IconButton(
                         tooltip: fourEyesBlocked.contains(v.number)
                             ? 'Vier-Augen-Prinzip: Eine andere Person muss '
-                                'freigeben'
+                                  'freigeben'
                             : 'Diese Version freigeben',
                         icon: const Icon(Icons.task_alt, size: 20),
                         onPressed: fourEyesBlocked.contains(v.number)
@@ -1865,15 +1905,10 @@ class _VersionsCard extends StatelessWidget {
                     if (!v.isHidden) ...[
                       if (onOpenEdit != null)
                         IconButton(
-                          tooltip: 'Öffnen & bearbeiten (Änderungen überwachen)',
+                          tooltip:
+                              'Öffnen & bearbeiten (Änderungen überwachen)',
                           icon: const Icon(Icons.edit_document, size: 20),
                           onPressed: () => onOpenEdit!(v),
-                        ),
-                      if (onReplaceFile != null)
-                        IconButton(
-                          tooltip: 'Datei direkt ersetzen',
-                          icon: const Icon(Icons.find_replace, size: 20),
-                          onPressed: () => onReplaceFile!(v),
                         ),
                       IconButton(
                         tooltip: 'Herunterladen & öffnen',
@@ -1977,7 +2012,8 @@ class _MarkdownPreview extends StatelessWidget {
     final uri = href == null ? null : Uri.tryParse(href);
     // Only absolute web/mail links: relative links point into the document
     // set, which has no in-app route.
-    if (uri == null || !const {'http', 'https', 'mailto'}.contains(uri.scheme)) {
+    if (uri == null ||
+        !const {'http', 'https', 'mailto'}.contains(uri.scheme)) {
       return;
     }
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -2052,8 +2088,11 @@ class _MarkdownImageStub extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.image_not_supported_outlined,
-            size: 18, color: scheme.onSurfaceVariant),
+        Icon(
+          Icons.image_not_supported_outlined,
+          size: 18,
+          color: scheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 6),
         Flexible(
           child: Text(
@@ -2122,8 +2161,10 @@ class _PdfPreviewState extends State<_PdfPreview> {
       // Silent fallback to preview images, but say why in debug builds —
       // otherwise a broken/renamed route is indistinguishable from
       // "this format has no PDF rendition".
-      debugPrint('view/pdf failed for ${widget.uuid} v${v.number} '
-          '(${e is ApiException ? 'HTTP ${e.statusCode}' : e.runtimeType}): $e');
+      debugPrint(
+        'view/pdf failed for ${widget.uuid} v${v.number} '
+        '(${e is ApiException ? 'HTTP ${e.statusCode}' : e.runtimeType}): $e',
+      );
       if (!mounted) return;
       setState(() => _failed = true);
     }

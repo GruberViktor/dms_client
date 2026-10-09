@@ -48,12 +48,13 @@ String formatBytes(int bytes) {
 bool isPdfMime(String? mime) => (mime ?? '').contains('application/pdf');
 
 /// Formats the server can convert on the fly via
-/// GET /documents/{uuid}/versions/{n}/download/pdf (odt and docx).
+/// GET /documents/{uuid}/versions/{n}/download/pdf (odt, docx, drawio).
 /// Substring match: servers may append parameters (e.g. `; charset=binary`).
 bool canDownloadAsPdf(String? mime) {
   final m = mime ?? '';
   return m.contains('officedocument.wordprocessingml.document') ||
-      m.contains('opendocument.text');
+      m.contains('opendocument.text') ||
+      m.contains('vnd.jgraph.mxfile');
 }
 
 /// Markdown source we can render in-app from the extracted text.

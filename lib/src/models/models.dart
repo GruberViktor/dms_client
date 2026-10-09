@@ -311,6 +311,8 @@ class Document {
   final List<DocumentVersion> versions;
   // Also present on list/search rows; null when all versions are hidden.
   final String? mimeType;
+  // List/search rows: a visible version awaits release.
+  final bool hasPendingRelease;
 
   Document({
     required this.uuid,
@@ -327,6 +329,7 @@ class Document {
     required this.content,
     required this.mimeType,
     required this.versions,
+    this.hasPendingRelease = false,
   });
 
   factory Document.fromJson(Map<String, dynamic> json) => Document(
@@ -346,6 +349,7 @@ class Document {
         versions: ((json['versions'] as List?) ?? const [])
             .map((e) => DocumentVersion.fromJson(e as Map<String, dynamic>))
             .toList(),
+        hasPendingRelease: _asBool(json['has_pending_release']),
       );
 
   /// Changes whenever the server's renderings (preview images, `view/pdf`)
@@ -628,6 +632,7 @@ class SearchHit {
   final DateTime? dateAdded;
   final bool archived;
   final String? mimeType; // null when all versions are hidden
+  final bool hasPendingRelease;
   final double? rank;
   final String headline; // contains <b>..</b> around matches
 
@@ -639,6 +644,7 @@ class SearchHit {
     required this.dateAdded,
     required this.archived,
     required this.mimeType,
+    this.hasPendingRelease = false,
     required this.rank,
     required this.headline,
   });
@@ -653,6 +659,7 @@ class SearchHit {
             : null,
         archived: _asBool(json['archived']),
         mimeType: json['mime_type'] as String?,
+        hasPendingRelease: _asBool(json['has_pending_release']),
         rank: (json['rank'] as num?)?.toDouble(),
         headline: (json['headline'] as String?) ?? '',
       );

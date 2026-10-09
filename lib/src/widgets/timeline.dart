@@ -22,8 +22,9 @@ class DocumentTimeline extends StatelessWidget {
     }
     // comment_* audit rows duplicate what the comment node already shows —
     // add/edit via the node itself, delete via its struck-through state.
-    final visible = events.where((e) =>
-        e is! AuditEvent || !e.action.startsWith('comment_'));
+    final visible = events.where(
+      (e) => e is! AuditEvent || !e.action.startsWith('comment_'),
+    );
     // Newest first.
     final sorted = [...visible]
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -99,10 +100,10 @@ class _TimelineRow extends StatelessWidget {
                     color: isVersion
                         ? (e.isHidden ? scheme.outlineVariant : scheme.primary)
                         : isComment
-                            ? (e.isDeleted
-                                ? scheme.outlineVariant
-                                : scheme.tertiary)
-                            : scheme.outline,
+                        ? (e.isDeleted
+                              ? scheme.outlineVariant
+                              : scheme.tertiary)
+                        : scheme.outline,
                     border: isVersion
                         ? Border.all(color: scheme.primaryContainer, width: 3)
                         : null,
@@ -121,11 +122,10 @@ class _TimelineRow extends StatelessWidget {
               child: isVersion
                   ? _VersionCard(event: e)
                   : isComment
-                      ? _CommentBubble(event: e)
-                      : e is ReplaceDiffEvent
-                          ? _ReplaceDiffLine(event: e)
-                          : _AuditLine(
-                              event: e as AuditEvent, repeat: entry.repeat),
+                  ? _CommentBubble(event: e)
+                  : e is ReplaceDiffEvent
+                  ? _ReplaceDiffLine(event: e)
+                  : _AuditLine(event: e as AuditEvent, repeat: entry.repeat),
             ),
           ),
         ],
@@ -195,19 +195,24 @@ class _AuditLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text.rich(
-          TextSpan(children: [
-            TextSpan(
-              text: actor,
-              style: TextStyle(
-                fontWeight: _deEmphasized ? FontWeight.normal : FontWeight.w600,
-                fontStyle: event.actor == null ? FontStyle.italic : null,
+          TextSpan(
+            children: [
+              TextSpan(
+                text: actor,
+                style: TextStyle(
+                  fontWeight: _deEmphasized
+                      ? FontWeight.normal
+                      : FontWeight.w600,
+                  fontStyle: event.actor == null ? FontStyle.italic : null,
+                ),
               ),
-            ),
-            TextSpan(text: ' $label'),
-          ]),
+              TextSpan(text: ' $label'),
+            ],
+          ),
           style: _deEmphasized
-              ? theme.textTheme.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant)
+              ? theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                )
               : theme.textTheme.bodyMedium,
         ),
         Text(formatDateTime(event.timestamp), style: muted),
@@ -220,8 +225,10 @@ class _AuditLine extends StatelessWidget {
             event.context?['error'] != null)
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text('${event.context!['error']}',
-                style: muted?.copyWith(color: scheme.error)),
+            child: Text(
+              '${event.context!['error']}',
+              style: muted?.copyWith(color: scheme.error),
+            ),
           ),
       ],
     );
@@ -249,8 +256,9 @@ class _ReplaceDiffLine extends StatelessWidget {
         ),
         Text(
           formatDateTime(event.timestamp),
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
         Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -285,20 +293,25 @@ class _ChangesTable extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 1),
               child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(
+                TextSpan(
+                  children: [
+                    TextSpan(
                       text: '${e.key}: ',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  TextSpan(
-                    text: _fmt(e.value is Map ? e.value['old'] : null),
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      decoration: TextDecoration.lineThrough,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                  ),
-                  const TextSpan(text: '  →  '),
-                  TextSpan(text: _fmt(e.value is Map ? e.value['new'] : e.value)),
-                ]),
+                    TextSpan(
+                      text: _fmt(e.value is Map ? e.value['old'] : null),
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                    const TextSpan(text: '  →  '),
+                    TextSpan(
+                      text: _fmt(e.value is Map ? e.value['new'] : e.value),
+                    ),
+                  ],
+                ),
                 style: small,
               ),
             ),
@@ -327,8 +340,9 @@ class _CommentBubble extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final deleted = event.isDeleted;
-    final muted =
-        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -344,27 +358,32 @@ class _CommentBubble extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.chat_bubble_outline,
-                  size: 14,
-                  color: deleted ? scheme.outline : scheme.tertiary),
+              Icon(
+                Icons.chat_bubble_outline,
+                size: 14,
+                color: deleted ? scheme.outline : scheme.tertiary,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text.rich(
-                  TextSpan(children: [
-                    TextSpan(
-                      text: event.author,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const TextSpan(text: ' hat kommentiert'),
-                    if (event.editedAt != null)
+                  TextSpan(
+                    children: [
                       TextSpan(
-                        text: event.editedBy != null &&
-                                event.editedBy != event.author
-                            ? ' · bearbeitet von ${event.editedBy}'
-                            : ' · bearbeitet',
-                        style: TextStyle(color: scheme.onSurfaceVariant),
+                        text: event.author,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                  ]),
+                      const TextSpan(text: ' hat kommentiert'),
+                      if (event.editedAt != null)
+                        TextSpan(
+                          text:
+                              event.editedBy != null &&
+                                  event.editedBy != event.author
+                              ? ' · bearbeitet von ${event.editedBy}'
+                              : ' · bearbeitet',
+                          style: TextStyle(color: scheme.onSurfaceVariant),
+                        ),
+                    ],
+                  ),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: deleted ? scheme.onSurfaceVariant : null,
                   ),
@@ -421,9 +440,11 @@ class _VersionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(mimeIcon(event.mimeType),
-                    size: 20,
-                    color: hidden ? scheme.outline : scheme.primary),
+                Icon(
+                  mimeIcon(event.mimeType),
+                  size: 20,
+                  color: hidden ? scheme.outline : scheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -453,8 +474,9 @@ class _VersionCard extends StatelessWidget {
             Text(
               '${formatBytes(event.size)} · ${event.uploadedBy} · '
               '${formatDateTime(event.timestamp)}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
             // Only explicit releases carry released_by; auto-released
             // versions stay unannotated (approvals hand-off §5).
@@ -462,8 +484,9 @@ class _VersionCard extends StatelessWidget {
               Text(
                 'Freigegeben von ${event.releasedBy}'
                 '${event.releasedAt != null ? ' · ${formatDateTime(event.releasedAt!)}' : ''}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             if (hidden)
               Padding(
@@ -529,19 +552,17 @@ class PendingReleaseBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: dark
-            ? Colors.amber.shade900.withValues(alpha: .5)
-            : Colors.amber.shade100,
+        color: dark ? Colors.amber.shade900 : Colors.amber.shade100,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        'wartet auf Freigabe',
+        'Freigabe erforderlich',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: dark ? Colors.amber.shade200 : Colors.amber.shade900,
-              fontWeight: FontWeight.w700,
-            ),
+          color: dark ? Colors.white : Colors.amber.shade900,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -569,8 +590,9 @@ class _DiffSectionState extends State<_DiffSection> {
     if (d.tooLarge) {
       return Text(
         'Unterschiede zu umfangreich — bitte die Datei direkt prüfen',
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: scheme.onSurfaceVariant),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
       );
     }
 
@@ -581,13 +603,17 @@ class _DiffSectionState extends State<_DiffSection> {
         const SizedBox(width: 6),
         _chip(context, '−${d.removedLines}', Colors.red),
         const SizedBox(width: 6),
-        Icon(_expanded ? Icons.expand_less : Icons.expand_more,
-            size: 18, color: scheme.onSurfaceVariant),
+        Icon(
+          _expanded ? Icons.expand_less : Icons.expand_more,
+          size: 18,
+          color: scheme.onSurfaceVariant,
+        ),
         if (d.fromVersion != null)
           Text(
             '  ggü. v${d.fromVersion}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: scheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
       ],
     );
@@ -631,9 +657,9 @@ class _DiffSectionState extends State<_DiffSection> {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: dark ? color.shade200 : color.shade800,
-              fontWeight: FontWeight.w700,
-            ),
+          color: dark ? color.shade200 : color.shade800,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -663,10 +689,12 @@ class _UnifiedDiffText extends StatelessWidget {
       } else if (line.startsWith('@@')) {
         color = dark ? Colors.blue.shade300 : Colors.blue.shade800;
       }
-      spans.add(TextSpan(
-        text: '$line\n',
-        style: color != null ? mono.copyWith(color: color) : mono,
-      ));
+      spans.add(
+        TextSpan(
+          text: '$line\n',
+          style: color != null ? mono.copyWith(color: color) : mono,
+        ),
+      );
     }
     return Text.rich(TextSpan(children: spans), style: mono);
   }

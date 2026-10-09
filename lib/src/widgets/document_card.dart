@@ -8,6 +8,7 @@ import '../api/api_client.dart';
 import '../models/models.dart';
 import '../util/format.dart';
 import 'common.dart';
+import 'timeline.dart' show PendingReleaseBadge;
 
 /// Paperless-style document tile: preview header, title, type/date meta and
 /// open/download actions.
@@ -23,6 +24,7 @@ class DocumentCard extends StatefulWidget {
   final String? mimeType;
   final bool archived;
   final bool inComplianceMode;
+  final bool hasPendingRelease;
   final VoidCallback onOpen;
 
   const DocumentCard._({
@@ -35,6 +37,7 @@ class DocumentCard extends StatefulWidget {
     required this.mimeType,
     required this.archived,
     required this.inComplianceMode,
+    required this.hasPendingRelease,
     required this.onOpen,
   });
 
@@ -54,6 +57,7 @@ class DocumentCard extends StatefulWidget {
           mimeType: document.mimeType,
           archived: document.archived,
           inComplianceMode: document.inComplianceMode,
+          hasPendingRelease: document.hasPendingRelease,
           onOpen: onOpen,
         );
 
@@ -73,6 +77,7 @@ class DocumentCard extends StatefulWidget {
           mimeType: hit.mimeType,
           archived: hit.archived,
           inComplianceMode: false,
+          hasPendingRelease: hit.hasPendingRelease,
           onOpen: onOpen,
         );
 
@@ -171,6 +176,12 @@ class _DocumentCardState extends State<DocumentCard> {
                             ),
                         ],
                       ),
+                    ),
+                  if (d.hasPendingRelease)
+                    const Positioned(
+                      left: 6,
+                      bottom: 6,
+                      child: PendingReleaseBadge(),
                     ),
                 ],
               ),

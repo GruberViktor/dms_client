@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../state/deep_links.dart';
 import '../state/editors.dart';
 import '../state/notifications.dart';
 import '../state/session.dart';
 import 'admin/admin_screen.dart';
+import 'document_detail_screen.dart';
 import 'document_list_screen.dart';
 import 'inbox_screen.dart';
 import 'index_browser_screen.dart';
@@ -29,6 +31,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   GlobalKey<NavigatorState> _navKey(String label) =>
       _navKeys.putIfAbsent(label, () => GlobalKey<NavigatorState>());
+
+  // Tab labels of the last build, for deep links arriving between builds.
+  List<String> _labels = [];
+
+  static const _linkTabs = {
+    'doc': 'Dokumente',
+    'documents': 'Dokumente',
+    'indexes': 'Indizes',
+    'inbox': 'Eingang',
+    'notifications': 'Posteingang',
+    'admin': 'Verwaltung',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    // fireImmediately: a link may have arrived before login. Applied after
+    // the frame — providers must not change during the widget build.
+    ref.listenManual(pendingDeepLinkProvider, (_, uri) {
+      if (uri == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openLink(uri));
+    }, fireImmediately: true);
+  }
+
+  void _openLink(Uri uri) {
+    if (!mounted) return;
+    ref.read(pendingDeepLinkProvider.notifier).clear();
+    final label = _linkTabs[uri.host];
+    final i = _labels.indexOf(label ?? '');
+    // Unknown target, or a tab this user does not have (inbox, admin).
+    if (i < 0) return;
+    setState(() => _tab = i);
+    if (uri.host == 'doc' && uri.pathSegments.isNotEmpty) {
+      _navKey(label!).currentState?.push(MaterialPageRoute(
+          builder: (_) => DocumentDetailScreen(uuid: uri.pathSegments.first)));
+    }
+  }
 
   Widget _tabNavigator(String label, Widget root) => Navigator(
         key: _navKey(label),
@@ -80,6 +119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
     ];
     if (_tab >= destinations.length) _tab = 0;
+    _labels = [for (final d in destinations) d.label];
 
     void onDestinationSelected(int i) {
       // Re-tapping the active tab pops it back to its root, matching the

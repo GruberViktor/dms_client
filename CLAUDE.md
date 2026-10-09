@@ -42,6 +42,12 @@ token) in flutter_secure_storage.
   `document_editing` events (dropped after `expires_in` unless repeated),
   shown by `widgets/editors_banner.dart` on detail + edit screens. Notice
   only — the server does not lock.
+- `lib/src/state/deep_links.dart` — `luvi-dms://doc/<uuid>` and
+  `luvi-dms://<tab>` links via `app_links`; `HomeScreen` switches tab / pushes
+  the detail (a link received before login waits). Linux: the runner is single
+  instance (a second launch forwards its link and raises the window), the
+  scheme is registered by `linux/packaging/install.sh`. Android: intent filter
+  in the manifest. Server notification emails carry these links.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
   document list (compact search field + type dropdown, type tree as an
   inline collapsible sidebar ≥760px content width / overlay drawer below,
@@ -92,7 +98,7 @@ token) in flutter_secure_storage.
   `…/versions/{n}/view/pdf` (needs only `view`, logged as a view, seek Ranges
   deduped server-side); only an explicit Download/open-externally action may
   call `…/download` or `…/download/pdf` (needs `download`, logged as one).
-- Detail-screen preview: PDFs (and odt/docx via `…/view/pdf`) render
+- Detail-screen preview: PDFs (and odt/docx/drawio via `…/view/pdf`) render
   in-app with pdfrx/pdfium — real text layer, select/copy. Markdown
   (`isMarkdown()` — extension decides, libmagic sniffs `.md` as `text/plain`)
   renders with flutter_markdown_plus from `Document.content`: the extractor
@@ -132,7 +138,7 @@ Notifications & watches hand-off implemented: Inbox tab with polled unread
 badge, watch bells on document detail + type-tree nodes (a type watch covers
 the subtree), @-mention autocomplete in the comment composer (`can_view:
 false` users struck through), mention tokens styled in comment bodies.
-odt/docx versions can be fetched as PDF (`…/versions/{n}/download/pdf`) via
+odt/docx/drawio versions can be fetched as PDF (`…/versions/{n}/download/pdf`) via
 the pdf icon on list cards, the detail top bar, and version rows. Note the
 spec prose calling `mime_type` detail-only is outdated: the server now sends
 it on document list and search rows too (null when all versions are hidden).
@@ -148,7 +154,9 @@ optimistic release buttons (`release_version` atom; plain 403 → §5 deny,
 `_fourEyesBlocked`), the timeline renders the live `proposed_diff` ("what
 changes if released") on pending version nodes and `version_release` audit
 rows, and replace-file warns that it resets a released version to pending
-(§7). Reject = the existing hide flow. No pending-approvals queue exists
+(§7). Reject = the existing hide flow. List/search rows carry
+`has_pending_release` (server addition, not in the spec yet) → the same
+amber `PendingReleaseBadge` on the document card. No pending-approvals queue exists
 server-side (§10).
 
 Storage-binding hand-off implemented: retention policies carry a required
