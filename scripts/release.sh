@@ -223,10 +223,14 @@ log "Collecting APKs"
 
 APK_DIR="build/app/outputs/flutter-apk"
 
-# versionName sits UTF-16 encoded in the binary manifest; dropping the NULs makes it greppable
+# versionName sits UTF-16 encoded in the binary manifest; dropping the NULs makes it greppable.
+# Read it whole first: `grep -q` exits at the first match, unzip/tr then die of
+# SIGPIPE, and pipefail turns that into a spurious failure.
 check_apk_version() {
-    unzip -p "$1" AndroidManifest.xml | tr -d '\0' | grep -aqF "$VERSION" \
-        || die "$1 is not built for $VERSION — run without --skip-build"
+    local manifest
+    manifest="$(unzip -p "$1" AndroidManifest.xml | tr -d '\0')"
+    [[ "$manifest" == *"$VERSION"* ]] && return 0
+    die "$1 is not built for $VERSION (found: $(grep -aoE '[0-9]+\.[0-9]+\.[0-9]+' <<<"$manifest" | sort -u | tr '\n' ' ')) — run without --skip-build"
 }
 found_apk=0
 if [ "$UNIVERSAL_APK" -eq 1 ]; then

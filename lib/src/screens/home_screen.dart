@@ -173,22 +173,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? tabs
         : Column(
             children: [
-              MaterialBanner(
-                leading: const Icon(Icons.system_update_outlined),
-                content: Text('LUVI Docs ${update.version} ist verfügbar.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => setState(() => _updateDismissed = true),
-                    child: const Text('Später'),
+              // One row: MaterialBanner moves two actions onto a second line.
+              Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
                   ),
-                  TextButton(
-                    onPressed: () => launchUrl(
-                      Uri.parse(update.url),
-                      mode: LaunchMode.externalApplication,
-                    ),
-                    child: const Text('Herunterladen'),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.system_update_outlined),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'LUVI Docs ${update.version} ist verfügbar.',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      FilledButton(
+                        onPressed: () => launchUrl(
+                          Uri.parse(update.url),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        child: const Text('Herunterladen'),
+                      ),
+                      IconButton(
+                        tooltip: 'Später',
+                        icon: const Icon(Icons.close),
+                        onPressed: () =>
+                            setState(() => _updateDismissed = true),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
               Expanded(child: tabs),
             ],
