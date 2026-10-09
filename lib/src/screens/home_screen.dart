@@ -64,15 +64,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (i < 0) return;
     setState(() => _tab = i);
     if (uri.host == 'doc' && uri.pathSegments.isNotEmpty) {
-      _navKey(label!).currentState?.push(MaterialPageRoute(
-          builder: (_) => DocumentDetailScreen(uuid: uri.pathSegments.first)));
+      _navKey(label!).currentState?.push(
+        MaterialPageRoute(
+          builder: (_) => DocumentDetailScreen(uuid: uri.pathSegments.first),
+        ),
+      );
     }
   }
 
   Widget _tabNavigator(String label, Widget root) => Navigator(
-        key: _navKey(label),
-        onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => root),
-      );
+    key: _navKey(label),
+    onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => root),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -97,19 +100,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         label: 'Dokumente',
         root: const DocumentListScreen(),
       ),
-      (
-        icon: const Icon(Icons.account_tree_outlined),
-        label: 'Indizes',
-        root: const IndexListScreen(),
-      ),
-      // Document inbox; hidden when `GET inbox/` is refused.
       if (hasInbox)
         (
           icon: const Icon(Icons.move_to_inbox_outlined),
           label: 'Eingang',
           root: const InboxScreen(),
         ),
-      (icon: inboxIcon, label: 'Posteingang', root: const NotificationsScreen()),
+      (
+        icon: const Icon(Icons.account_tree_outlined),
+        label: 'Indizes',
+        root: const IndexListScreen(),
+      ),
+      // Document inbox; hidden when `GET inbox/` is refused.
+      (
+        icon: inboxIcon,
+        label: 'Posteingang',
+        root: const NotificationsScreen(),
+      ),
       // Admin area is gated on is_superuser (spec §7 M4).
       if (isAdmin)
         (
@@ -125,25 +132,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Re-tapping the active tab pops it back to its root, matching the
       // usual bottom-nav / rail convention.
       if (i == _tab) {
-        _navKey(destinations[i].label)
-            .currentState
-            ?.popUntil((r) => r.isFirst);
+        _navKey(destinations[i].label).currentState?.popUntil((r) => r.isFirst);
       } else {
         setState(() => _tab = i);
       }
     }
 
     final logoutButton = IconButton(
-      tooltip: 'Abmelden${session != null ? ' (${session.user.username})' : ''}',
+      tooltip:
+          'Abmelden${session != null ? ' (${session.user.username})' : ''}',
       icon: const Icon(Icons.logout),
       onPressed: () => ref.read(sessionProvider.notifier).logout(),
     );
 
     final body = IndexedStack(
       index: _tab,
-      children: [
-        for (final d in destinations) _tabNavigator(d.label, d.root),
-      ],
+      children: [for (final d in destinations) _tabNavigator(d.label, d.root)],
     );
 
     // Route the system/back button to the active tab's nested Navigator first,
@@ -177,10 +181,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               destinations: [
                 for (final d in destinations)
-                  NavigationRailDestination(
-                    icon: d.icon,
-                    label: Text(d.label),
-                  ),
+                  NavigationRailDestination(icon: d.icon, label: Text(d.label)),
               ],
             ),
             const VerticalDivider(width: 1),

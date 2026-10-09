@@ -43,6 +43,10 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   Timer? _pollTimer;
   Timer? _changeDebounce;
   bool _busy = false;
+  // Timeline shows view/download events only on request.
+  bool _showAccessEvents = false;
+  // Version picked in the versions card for the preview; null = default.
+  int? _selectedVersion;
   // Versions whose release hit the four-eyes 403 (`approval_required`): the
   // button stays visible but disabled with a hint — unlike a plain 403,
   // which drops release_version for the whole type (hand-off §4).
@@ -795,6 +799,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     // Optimistic like the rest of §5: shown until a plain 403 denies it.
     final canRelease = !denied.isDenied(doc.documentType, 'release_version');
     final pending = doc.latestPendingVersion;
+    // Preview the version picked in the versions card, else the pending
+    // proposal (showing the old content while a release waits is
+    // confusing), else the released content. Per-version previews are open
+    // to anyone with `view` (§5).
+    final previewVersion =
+        doc.versions.where((v) => v.number == _selectedVersion).firstOrNull ??
+        pending ??
+        current;
     // No "may I comment?" flag exists — show the composer optimistically and
     // drop it for this type after a 403 (hand-off §5).
     final canComment = !denied.isDenied(doc.documentType, 'comment');
@@ -848,6 +860,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           onReExtract: (_busy || !canUpload) ? null : _reExtract,
           onRelease: (_busy || !canRelease) ? null : _releaseVersion,
           fourEyesBlocked: _fourEyesBlocked,
+          previewNumber: previewVersion?.number,
+          onSelect: (v) => setState(() => _selectedVersion = v.number),
         ),
         const SizedBox(height: 12),
         _CommentsCard(
@@ -869,12 +883,28 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Verlauf', style: Theme.of(context).textTheme.titleMedium),
+                Row(
+                  children: [
+                    Text(
+                      'Verlauf',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    FilterChip(
+                      label: const Text('detailiert'),
+                      selected: _showAccessEvents,
+                      onSelected: (v) => setState(() => _showAccessEvents = v),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 if (_events == null)
                   const Text('Verlauf nicht verfügbar.')
                 else
-                  DocumentTimeline(events: _events!),
+                  DocumentTimeline(
+                    events: _events!,
+                    showAccessEvents: _showAccessEvents,
+                  ),
               ],
             ),
           ),
@@ -884,10 +914,6 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
 
     // PDFs (and odt/docx via server-side conversion) render in-app with a
     // real text layer; everything else uses the server preview images.
-    // Preview the released content; if none exists (only-released version
-    // replaced, §7), fall back to the pending proposal — its per-version
-    // preview is open to anyone with `view` (§5).
-    final previewVersion = current ?? pending;
     // Markdown has neither a PDF rendition nor server preview images, but the
     // extractor stores text files verbatim — so `content` *is* the source.
     // It belongs to the effective (released) version, hence only that one is
@@ -898,7 +924,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             isMarkdown(previewVersion.mimeType, previewVersion.originalFilename)
         ? (doc.content ?? '')
         : null;
-    final preview = previewVersion == null
+    final previewBody = previewVersion == null
         ? const SizedBox.shrink()
         : markdownSource != null && markdownSource.trim().isNotEmpty
         ? _MarkdownPreview(source: markdownSource)
@@ -911,9 +937,66 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             revision: ref.read(apiProvider).previewRevisions[doc.uuid],
           )
         : _PreviewPager(
+            // new version → start again on page 1
+            key: ValueKey(previewVersion.number),
             api: ref.read(apiProvider),
             uuid: doc.uuid,
             version: previewVersion,
+          );
+    // The current version needs no marker; any other one gets a corner
+    // banderole so it is not mistaken for the document's content.
+    final scheme = Theme.of(context).colorScheme;
+    final preview =
+        previewVersion == null || previewVersion.number == current?.number
+        ? previewBody
+        // Flutter's Banner has a fixed size: paint it over an empty box and
+        // scale that box, so only the band grows. The clip cuts the band's
+        // ends, which reach past the preview's corner.
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              children: [
+                Positioned.fill(child: previewBody),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: Transform.scale(
+                      scale: 1.6,
+                      alignment: Alignment.topRight,
+                      child: Banner(
+                        location: BannerLocation.topEnd,
+                        // the band is 80 px wide before scaling: keep the
+                        // message short
+                        message:
+                            'v${previewVersion.number} '
+                            '${previewVersion.isHidden
+                                ? 'verborgen'
+                                : previewVersion.isPending
+                                ? 'Entwurf'
+                                : 'veraltet'}',
+                        color: previewVersion.isHidden
+                            ? scheme.outline
+                            : previewVersion.isPending
+                            ? scheme.tertiary
+                            : scheme.errorContainer,
+                        textStyle: TextStyle(
+                          color: previewVersion.isHidden
+                              ? scheme.surface
+                              : previewVersion.isPending
+                              ? scheme.onTertiary
+                              : scheme.onErrorContainer,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          height: 1.0,
+                        ),
+                        child: const SizedBox(width: 80, height: 80),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           );
 
     return Scaffold(
@@ -946,19 +1029,21 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               icon: const Icon(Icons.edit_outlined),
               onPressed: _busy ? null : _editDocument,
             ),
-          if (current != null)
+          // act on the previewed version, so the buttons match what is shown
+          if (previewVersion != null)
             IconButton(
-              tooltip: 'Herunterladen & öffnen',
+              tooltip: 'v${previewVersion.number} herunterladen & öffnen',
               icon: const Icon(Icons.open_in_new),
-              onPressed: _busy ? null : () => _downloadAndOpen(current),
+              onPressed: _busy ? null : () => _downloadAndOpen(previewVersion),
             ),
-          if (current != null && canDownloadAsPdf(current.mimeType))
+          if (previewVersion != null &&
+              canDownloadAsPdf(previewVersion.mimeType))
             IconButton(
-              tooltip: 'Als PDF herunterladen',
+              tooltip: 'v${previewVersion.number} als PDF herunterladen',
               icon: const Icon(Icons.picture_as_pdf_outlined),
               onPressed: _busy
                   ? null
-                  : () => _downloadAndOpen(current, asPdf: true),
+                  : () => _downloadAndOpen(previewVersion, asPdf: true),
             ),
           IconButton(
             tooltip: doc.archived ? 'Dearchivieren' : 'Archivieren',
@@ -1642,17 +1727,17 @@ class _EditSessionBanner extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 (pendingNumber != null
-                    ? 'Version $pendingNumber wartet auf Freigabe: Die Änderung '
-                          'ersetzt deren Datei, eine weitere Version ist bis zur '
-                          'Freigabe nicht möglich.'
-                    : (session.compliance
-                        ? 'Dieses Dokument unterliegt der Aufbewahrungspflicht: '
-                              'Die Änderung kann nur als Version '
-                              '${session.versionNumber + 1} hochgeladen werden.'
-                        : 'Änderung als Version '
-                              '${session.versionNumber + 1} hochladen oder die '
-                              'Datei der Version ${session.versionNumber} direkt '
-                              'überschreiben.')) +
+                        ? 'Version $pendingNumber wartet auf Freigabe: Die Änderung '
+                              'ersetzt deren Datei, eine weitere Version ist bis zur '
+                              'Freigabe nicht möglich.'
+                        : (session.compliance
+                              ? 'Dieses Dokument unterliegt der Aufbewahrungspflicht: '
+                                    'Die Änderung kann nur als Version '
+                                    '${session.versionNumber + 1} hochgeladen werden.'
+                              : 'Änderung als Version '
+                                    '${session.versionNumber + 1} hochladen oder die '
+                                    'Datei der Version ${session.versionNumber} direkt '
+                                    'überschreiben.')) +
                     (pendingNumber == null && approvalGated
                         ? ' Dieser Typ erfordert eine Freigabe — das Ergebnis '
                               'wartet auf Freigabe, bevor es zum Dokument wird.'
@@ -1798,6 +1883,8 @@ class _VersionsCard extends StatelessWidget {
   final void Function(DocumentVersion)? onReExtract;
   final void Function(DocumentVersion)? onRelease;
   final Set<int> fourEyesBlocked;
+  final int? previewNumber;
+  final void Function(DocumentVersion) onSelect;
 
   const _VersionsCard({
     required this.doc,
@@ -1811,6 +1898,8 @@ class _VersionsCard extends StatelessWidget {
     required this.onReExtract,
     required this.onRelease,
     required this.fourEyesBlocked,
+    required this.previewNumber,
+    required this.onSelect,
   });
 
   @override
@@ -1850,7 +1939,13 @@ class _VersionsCard extends StatelessWidget {
             for (final v in versions)
               ListTile(
                 dense: true,
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                selected: v.number == previewNumber,
+                selectedTileColor: theme.colorScheme.secondaryContainer,
+                onTap: () => onSelect(v),
                 leading: Icon(
                   mimeIcon(v.mimeType),
                   color: v.isHidden
@@ -2216,6 +2311,7 @@ class _PreviewPager extends StatefulWidget {
   final DocumentVersion version;
 
   const _PreviewPager({
+    super.key,
     required this.api,
     required this.uuid,
     required this.version,

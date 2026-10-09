@@ -9,8 +9,14 @@ import 'common.dart';
 /// view/download repeats are grouped ("5× angesehen").
 class DocumentTimeline extends StatelessWidget {
   final List<TimelineEvent> events;
+  // view/download audit rows; hidden by default because they dominate.
+  final bool showAccessEvents;
 
-  const DocumentTimeline({super.key, required this.events});
+  const DocumentTimeline({
+    super.key,
+    required this.events,
+    this.showAccessEvents = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +29,11 @@ class DocumentTimeline extends StatelessWidget {
     // comment_* audit rows duplicate what the comment node already shows —
     // add/edit via the node itself, delete via its struck-through state.
     final visible = events.where(
-      (e) => e is! AuditEvent || !e.action.startsWith('comment_'),
+      (e) =>
+          e is! AuditEvent ||
+          !(e.action.startsWith('comment_') ||
+              (!showAccessEvents &&
+                  (e.action == 'view' || e.action == 'download'))),
     );
     // Newest first.
     final sorted = [...visible]
