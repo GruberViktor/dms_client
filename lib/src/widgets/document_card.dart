@@ -8,7 +8,6 @@ import '../api/api_client.dart';
 import '../models/models.dart';
 import '../util/format.dart';
 import 'common.dart';
-import 'timeline.dart' show PendingReleaseBadge;
 
 /// Paperless-style document tile: preview header, title, type/date meta and
 /// open/download actions.
@@ -161,7 +160,7 @@ class _DocumentCardState extends State<DocumentCard> {
                   if (d.inComplianceMode || d.archived)
                     Positioned(
                       top: 6,
-                      right: 6,
+                      left: 6,
                       child: Row(
                         children: [
                           if (d.inComplianceMode)
@@ -177,11 +176,17 @@ class _DocumentCardState extends State<DocumentCard> {
                         ],
                       ),
                     ),
+                  // the card clips the band's ends
                   if (d.hasPendingRelease)
-                    const Positioned(
-                      left: 6,
-                      bottom: 6,
-                      child: PendingReleaseBadge(),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: CornerBanner(
+                        scale: 1.2,
+                        message: 'Freigabe',
+                        color: scheme.tertiary,
+                        textColor: scheme.onTertiary,
+                      ),
                     ),
                 ],
               ),

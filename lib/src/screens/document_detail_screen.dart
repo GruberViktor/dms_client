@@ -949,9 +949,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final preview =
         previewVersion == null || previewVersion.number == current?.number
         ? previewBody
-        // Flutter's Banner has a fixed size: paint it over an empty box and
-        // scale that box, so only the band grows. The clip cuts the band's
-        // ends, which reach past the preview's corner.
+        // the clip cuts the corner banner's ends
         : ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Stack(
@@ -960,39 +958,25 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
                 Positioned(
                   top: 0,
                   right: 0,
-                  child: IgnorePointer(
-                    child: Transform.scale(
-                      scale: 1.6,
-                      alignment: Alignment.topRight,
-                      child: Banner(
-                        location: BannerLocation.topEnd,
-                        // the band is 80 px wide before scaling: keep the
-                        // message short
-                        message:
-                            'v${previewVersion.number} '
-                            '${previewVersion.isHidden
-                                ? 'verborgen'
-                                : previewVersion.isPending
-                                ? 'Entwurf'
-                                : 'veraltet'}',
-                        color: previewVersion.isHidden
-                            ? scheme.outline
+                  child: CornerBanner(
+                    scale: 1.6,
+                    message:
+                        'v${previewVersion.number} '
+                        '${previewVersion.isHidden
+                            ? 'verborgen'
                             : previewVersion.isPending
-                            ? scheme.tertiary
-                            : scheme.errorContainer,
-                        textStyle: TextStyle(
-                          color: previewVersion.isHidden
-                              ? scheme.surface
-                              : previewVersion.isPending
-                              ? scheme.onTertiary
-                              : scheme.onErrorContainer,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          height: 1.0,
-                        ),
-                        child: const SizedBox(width: 80, height: 80),
-                      ),
-                    ),
+                            ? 'Entwurf'
+                            : 'veraltet'}',
+                    color: previewVersion.isHidden
+                        ? scheme.outline
+                        : previewVersion.isPending
+                        ? scheme.tertiary
+                        : scheme.errorContainer,
+                    textColor: previewVersion.isHidden
+                        ? scheme.surface
+                        : previewVersion.isPending
+                        ? scheme.onTertiary
+                        : scheme.onErrorContainer,
                   ),
                 ),
               ],

@@ -16,6 +16,52 @@ IconData mimeIcon(String? mime) => switch (mimeCategory(mime)) {
       _ => Icons.insert_drive_file_outlined,
     };
 
+/// 45° corner banderole like Flutter's debug banner. Place it with
+/// `Positioned(top: 0, left/right: 0)` in a Stack that clips, which cuts the
+/// band's ends. Banner has a fixed size, so it is painted over an empty box
+/// and that box is scaled. The band is 80 px wide before scaling: keep the
+/// message short.
+class CornerBanner extends StatelessWidget {
+  final String message;
+  final Color color;
+  final Color textColor;
+  final BannerLocation location;
+  final double scale;
+
+  const CornerBanner({
+    super.key,
+    required this.message,
+    required this.color,
+    required this.textColor,
+    this.location = BannerLocation.topEnd,
+    this.scale = 1.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Transform.scale(
+        scale: scale,
+        alignment: location == BannerLocation.topStart
+            ? Alignment.topLeft
+            : Alignment.topRight,
+        child: Banner(
+          message: message,
+          location: location,
+          color: color,
+          textStyle: TextStyle(
+            color: textColor,
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            height: 1.0,
+          ),
+          child: const SizedBox(width: 80, height: 80),
+        ),
+      ),
+    );
+  }
+}
+
 /// Thumbnail from the server preview endpoint; falls back to a mime icon
 /// for formats without previews (404) or while unauthenticated.
 class DocumentThumbnail extends StatelessWidget {
