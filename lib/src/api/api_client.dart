@@ -565,6 +565,77 @@ class ApiClient {
     await _request(editing ? 'PUT' : 'DELETE', '/documents/$uuid/editing/');
   }
 
+  // ---- Document inbox (inbox hand-off) ----
+
+  /// 403 = no inbox permission; the shell hides the tab then.
+  Future<Paginated<InboxItem>> inboxItems({
+    String? status,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _request('GET', '/inbox/', query: {
+      'status': ?status,
+      'limit': limit,
+      'offset': offset,
+    });
+    return Paginated.fromJson(_asMap(res.data), InboxItem.fromJson);
+  }
+
+  Future<InboxItem> inboxItem(String uuid) async {
+    final res = await _request('GET', '/inbox/$uuid/');
+    return InboxItem.fromJson(_asMap(res.data));
+  }
+
+  /// Original bytes; gone (404) once the item is accepted or rejected.
+  Future<Uint8List> inboxFile(String uuid) async {
+    final res = await _request<List<int>>('GET', '/inbox/$uuid/file/',
+        responseType: ResponseType.bytes);
+    return Uint8List.fromList(res.data!);
+  }
+
+  /// One multipart request; the `file` field repeats per file.
+  Future<List<InboxItem>> uploadInboxFiles(List<MultipartFile> files) async {
+    final form = FormData();
+    for (final f in files) {
+      form.files.add(MapEntry('file', f));
+    }
+    final res = await _request('POST', '/inbox/', data: form);
+    return (res.data as List)
+        .map((e) => InboxItem.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Files the item as a document; body as `POST documents/` without file.
+  Future<Document> acceptInboxItem(
+    String uuid, {
+    required String documentType,
+    required String title,
+    String? documentDate,
+    String? notes,
+    Map<String, dynamic> metadata = const {},
+    bool force = false,
+  }) async {
+    final res = await _request('POST', '/inbox/$uuid/accept/', data: {
+      'document_type': documentType,
+      'title': title,
+      'document_date': ?documentDate,
+      'notes': ?notes,
+      'metadata': metadata,
+      if (force) 'force': true,
+    });
+    return Document.fromJson(_asMap(res.data));
+  }
+
+  Future<InboxItem> rejectInboxItem(String uuid) async {
+    final res = await _request('POST', '/inbox/$uuid/reject/');
+    return InboxItem.fromJson(_asMap(res.data));
+  }
+
+  Future<InboxItem> reprocessInboxItem(String uuid) async {
+    final res = await _request('POST', '/inbox/$uuid/reprocess/');
+    return InboxItem.fromJson(_asMap(res.data));
+  }
+
   // ---- Admin: document types ----
 
   Future<DocumentType> createDocumentType(Map<String, dynamic> body) async {

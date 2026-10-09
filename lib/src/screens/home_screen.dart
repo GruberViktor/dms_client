@@ -6,6 +6,7 @@ import '../state/notifications.dart';
 import '../state/session.dart';
 import 'admin/admin_screen.dart';
 import 'document_list_screen.dart';
+import 'inbox_screen.dart';
 import 'index_browser_screen.dart';
 import 'notifications_screen.dart';
 
@@ -22,33 +23,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Each tab gets its own nested Navigator so that pushing a detail / browser
   // route stays inside the content area — the rail (or bottom nav) persists
   // instead of being overlaid — and each tab keeps its own navigation stack.
-  final Map<int, GlobalKey<NavigatorState>> _navKeys = {};
+  // Keyed by label: the inbox tab appears only after its permission probe,
+  // which shifts the indices of the tabs behind it.
+  final Map<String, GlobalKey<NavigatorState>> _navKeys = {};
 
-  GlobalKey<NavigatorState> _navKey(int tab) =>
-      _navKeys.putIfAbsent(tab, () => GlobalKey<NavigatorState>());
+  GlobalKey<NavigatorState> _navKey(String label) =>
+      _navKeys.putIfAbsent(label, () => GlobalKey<NavigatorState>());
 
-  Widget _rootFor(int tab) => switch (tab) {
-        0 => const DocumentListScreen(),
-        1 => const IndexListScreen(),
-        2 => const NotificationsScreen(),
-        _ => const AdminScreen(),
-      };
-
-  Widget _tabNavigator(int tab) => Navigator(
-        key: _navKey(tab),
-        onGenerateRoute: (settings) =>
-            MaterialPageRoute(builder: (_) => _rootFor(tab)),
+  Widget _tabNavigator(String label, Widget root) => Navigator(
+        key: _navKey(label),
+        onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => root),
       );
-
-  void _onDestinationSelected(int i) {
-    // Re-tapping the active tab pops it back to its root, matching the usual
-    // bottom-nav / rail convention.
-    if (i == _tab) {
-      _navKey(i).currentState?.popUntil((r) => r.isFirst);
-    } else {
-      setState(() => _tab = i);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,16 +50,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       isLabelVisible: unread > 0,
       child: const Icon(Icons.notifications_outlined),
     );
+    final hasInbox = ref.watch(inboxAvailableProvider).value ?? false;
     final destinations = [
       // Search lives in the document list itself.
-      (icon: const Icon(Icons.description_outlined), label: 'Dokumente'),
-      (icon: const Icon(Icons.account_tree_outlined), label: 'Indizes'),
-      (icon: inboxIcon, label: 'Posteingang'),
+      (
+        icon: const Icon(Icons.description_outlined),
+        label: 'Dokumente',
+        root: const DocumentListScreen(),
+      ),
+      (
+        icon: const Icon(Icons.account_tree_outlined),
+        label: 'Indizes',
+        root: const IndexListScreen(),
+      ),
+      // Document inbox; hidden when `GET inbox/` is refused.
+      if (hasInbox)
+        (
+          icon: const Icon(Icons.move_to_inbox_outlined),
+          label: 'Eingang',
+          root: const InboxScreen(),
+        ),
+      (icon: inboxIcon, label: 'Posteingang', root: const NotificationsScreen()),
       // Admin area is gated on is_superuser (spec §7 M4).
       if (isAdmin)
-        (icon: const Icon(Icons.admin_panel_settings_outlined), label: 'Verwaltung'),
+        (
+          icon: const Icon(Icons.admin_panel_settings_outlined),
+          label: 'Verwaltung',
+          root: const AdminScreen(),
+        ),
     ];
     if (_tab >= destinations.length) _tab = 0;
+
+    void onDestinationSelected(int i) {
+      // Re-tapping the active tab pops it back to its root, matching the
+      // usual bottom-nav / rail convention.
+      if (i == _tab) {
+        _navKey(destinations[i].label)
+            .currentState
+            ?.popUntil((r) => r.isFirst);
+      } else {
+        setState(() => _tab = i);
+      }
+    }
 
     final logoutButton = IconButton(
       tooltip: 'Abmelden${session != null ? ' (${session.user.username})' : ''}',
@@ -85,7 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final body = IndexedStack(
       index: _tab,
       children: [
-        for (var i = 0; i < destinations.length; i++) _tabNavigator(i),
+        for (final d in destinations) _tabNavigator(d.label, d.root),
       ],
     );
 
@@ -95,7 +112,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        _navKey(_tab).currentState?.maybePop();
+        _navKey(destinations[_tab].label).currentState?.maybePop();
       },
       child: body,
     );
@@ -106,7 +123,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             NavigationRail(
               selectedIndex: _tab,
-              onDestinationSelected: _onDestinationSelected,
+              onDestinationSelected: onDestinationSelected,
               labelType: NavigationRailLabelType.all,
               leading: const SizedBox(height: 8),
               trailing: Expanded(
@@ -137,7 +154,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: content,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: _onDestinationSelected,
+        onDestinationSelected: onDestinationSelected,
         destinations: [
           for (final d in destinations)
             NavigationDestination(icon: d.icon, label: d.label),

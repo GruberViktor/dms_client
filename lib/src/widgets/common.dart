@@ -172,3 +172,46 @@ class ComplianceBadge extends StatelessWidget {
     );
   }
 }
+
+/// Highlight shown over a [DropTarget] while files are dragged over it.
+class DropOverlay extends StatelessWidget {
+  final String label;
+
+  const DropOverlay({super.key, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.primary, width: 2),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.file_download_outlined,
+                  size: 48,
+                  color: scheme.onPrimaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

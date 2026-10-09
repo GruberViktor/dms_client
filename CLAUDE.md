@@ -169,3 +169,20 @@ and there is no group listing API (spec §10) — groups are entered as raw ids.
 Dev login: `claude` / `claude_password` on `http://localhost:8000`
 (superuser). Server holds demo data: a "Roundtrip test" document (type
 scratch, 2 versions) and a "By batch (edited)" index.
+
+Document inbox hand-off implemented (`screens/inbox_screen.dart`): "Eingang"
+tab (shown only when the `inboxAvailableProvider` probe of `GET inbox/`
+succeeds — "Posteingang" stays the notification inbox), multi-file upload
+by picker or drag & drop (one request), status filter chips. The list
+polls every 4 s while the server reports any `processing` item (asked via
+`?status=processing`, not read off the visible rows — under the "Bereit"
+filter those rows are not listed). The review
+screen shows the original file (`inbox/{uuid}/file/` — PDF/image; other
+formats show the extracted `content`) next to a form pre-filled from
+`suggestion` (marked "Vorschlag – bitte prüfen" via
+`MetadataFormFields.suggestedKeys`); type change keeps same-key values;
+non-empty `duplicate_of` shows a warning and accept then sends `force`.
+Two accept buttons: "Übernehmen & öffnen" opens the new document,
+"Übernehmen & weiter" moves to the next `ready` item (none → back to the list).
+`DocumentType.description` is edited in the type editor and shown in the
+inbox type picker.

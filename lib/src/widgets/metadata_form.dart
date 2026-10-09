@@ -35,6 +35,8 @@ class MetadataFormController {
   }
 }
 
+const suggestionHint = 'Vorschlag – bitte prüfen';
+
 /// Generates one form field per [MetadataFieldDef]. Wrap in a [Form] and
 /// validate/save through its [FormState]; read results off [controller].
 class MetadataFormFields extends StatelessWidget {
@@ -45,12 +47,17 @@ class MetadataFormFields extends StatelessWidget {
   /// Required fields are enforced on create, not on PATCH (spec §3).
   final bool enforceRequired;
 
+  /// Keys whose initial value came from the inbox suggestion — marked so
+  /// the user knows what to check.
+  final Set<String> suggestedKeys;
+
   const MetadataFormFields({
     super.key,
     required this.fields,
     required this.controller,
     this.initialValues = const {},
     this.enforceRequired = true,
+    this.suggestedKeys = const {},
   });
 
   @override
@@ -71,17 +78,20 @@ class MetadataFormFields extends StatelessWidget {
         ? initialValues[f.key]
         : f.defaultValue;
     final serverError = controller.serverErrors[f.key];
+    final hint = suggestedKeys.contains(f.key) ? suggestionHint : null;
 
     switch (f.fieldType) {
       case FieldType.boolean:
         return _BoolField(
           def: f,
+          hint: hint,
           initial: initial == true,
           controller: controller,
         );
       case FieldType.date:
         return _DateField(
           def: f,
+          hint: hint,
           initial: initial?.toString(),
           controller: controller,
           enforceRequired: enforceRequired,
@@ -90,6 +100,7 @@ class MetadataFormFields extends StatelessWidget {
       default:
         return _TextMetadataField(
           def: f,
+          hint: hint,
           initial: initial,
           controller: controller,
           enforceRequired: enforceRequired,
@@ -101,11 +112,13 @@ class MetadataFormFields extends StatelessWidget {
 
 class _BoolField extends StatefulWidget {
   final MetadataFieldDef def;
+  final String? hint;
   final bool initial;
   final MetadataFormController controller;
 
   const _BoolField({
     required this.def,
+    required this.hint,
     required this.initial,
     required this.controller,
   });
@@ -128,6 +141,7 @@ class _BoolFieldState extends State<_BoolField> {
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(widget.def.label),
+      subtitle: widget.hint != null ? Text(widget.hint!) : null,
       value: _value,
       onChanged: (v) {
         setState(() => _value = v);
@@ -139,6 +153,7 @@ class _BoolFieldState extends State<_BoolField> {
 
 class _DateField extends StatefulWidget {
   final MetadataFieldDef def;
+  final String? hint;
   final String? initial;
   final MetadataFormController controller;
   final bool enforceRequired;
@@ -146,6 +161,7 @@ class _DateField extends StatefulWidget {
 
   const _DateField({
     required this.def,
+    required this.hint,
     required this.initial,
     required this.controller,
     required this.enforceRequired,
@@ -199,6 +215,7 @@ class _DateFieldState extends State<_DateField> {
                 widget.def.label + (widget.def.required ? ' *' : ''),
             border: const OutlineInputBorder(),
             errorText: state.errorText,
+            helperText: widget.hint,
             suffixIcon: _iso != null
                 ? IconButton(
                     icon: const Icon(Icons.clear, size: 18),
@@ -218,6 +235,7 @@ class _DateFieldState extends State<_DateField> {
 
 class _TextMetadataField extends StatefulWidget {
   final MetadataFieldDef def;
+  final String? hint;
   final Object? initial;
   final MetadataFormController controller;
   final bool enforceRequired;
@@ -225,6 +243,7 @@ class _TextMetadataField extends StatefulWidget {
 
   const _TextMetadataField({
     required this.def,
+    required this.hint,
     required this.initial,
     required this.controller,
     required this.enforceRequired,
@@ -309,6 +328,7 @@ class _TextMetadataFieldState extends State<_TextMetadataField> {
       decoration: InputDecoration(
         labelText: widget.def.label + (widget.def.required ? ' *' : ''),
         border: const OutlineInputBorder(),
+        helperText: widget.hint,
         prefixIcon: _type == FieldType.monetary
             ? const Icon(Icons.payments_outlined, size: 20)
             : null,

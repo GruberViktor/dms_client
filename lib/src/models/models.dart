@@ -109,6 +109,9 @@ class DocumentType {
   final String? approvalMode; // none | required | four_eyes | null
   final List<MetadataFieldDef> metadataFields;
 
+  /// Free text the inbox classifier reads; shown in type pickers.
+  final String description;
+
   DocumentType({
     required this.slug,
     required this.name,
@@ -119,6 +122,7 @@ class DocumentType {
     required this.isActive,
     this.approvalMode,
     required this.metadataFields,
+    this.description = '',
   });
 
   factory DocumentType.fromJson(Map<String, dynamic> json) => DocumentType(
@@ -135,6 +139,7 @@ class DocumentType {
         metadataFields: ((json['metadata_fields'] as List?) ?? const [])
             .map((e) => MetadataFieldDef.fromJson(e as Map<String, dynamic>))
             .toList(),
+        description: json['description'] as String? ?? '',
       );
 }
 
@@ -1043,5 +1048,94 @@ class CurrentUser {
         groups: ((json['groups'] as List?) ?? const [])
             .map((e) => e is Map ? '${e['name']}' : '$e')
             .toList(),
+      );
+}
+
+/// Document inbox item (inbox hand-off): an uploaded file awaiting a human
+/// accept/reject. status: processing | ready | failed | accepted | rejected.
+class InboxItem {
+  final String uuid;
+  final String status;
+  final String originalFilename;
+  final String? mimeType;
+  final int size;
+  final List<String> duplicateOf;
+  final String content;
+  final InboxSuggestion? suggestion; // null = server sent `{}`
+  final String? error;
+  final String? uploadedBy;
+  final DateTime? uploadedAt;
+  final String? reviewedBy;
+  final String? document;
+
+  InboxItem({
+    required this.uuid,
+    required this.status,
+    required this.originalFilename,
+    this.mimeType,
+    this.size = 0,
+    this.duplicateOf = const [],
+    this.content = '',
+    this.suggestion,
+    this.error,
+    this.uploadedBy,
+    this.uploadedAt,
+    this.reviewedBy,
+    this.document,
+  });
+
+  bool get isOpen => status == 'processing' || status == 'ready' || status == 'failed';
+
+  factory InboxItem.fromJson(Map<String, dynamic> json) {
+    final s = json['suggestion'];
+    return InboxItem(
+      uuid: json['uuid'] as String,
+      status: json['status'] as String,
+      originalFilename: json['original_filename'] as String? ?? '',
+      mimeType: json['mime_type'] as String?,
+      size: (json['size'] as num?)?.toInt() ?? 0,
+      duplicateOf: ((json['duplicate_of'] as List?) ?? const [])
+          .map((e) => '$e')
+          .toList(),
+      content: json['content'] as String? ?? '',
+      suggestion: s is Map && s.isNotEmpty
+          ? InboxSuggestion.fromJson(s.cast<String, dynamic>())
+          : null,
+      error: json['error'] as String?,
+      uploadedBy: json['uploaded_by'] as String?,
+      uploadedAt: DateTime.tryParse(json['uploaded_at'] as String? ?? ''),
+      reviewedBy: json['reviewed_by'] as String?,
+      document: json['document'] as String?,
+    );
+  }
+}
+
+class InboxSuggestion {
+  final String? documentType;
+  final double? confidence;
+  final List<String> alternatives;
+  final String title;
+  final String? documentDate;
+  final Map<String, dynamic> metadata;
+
+  InboxSuggestion({
+    this.documentType,
+    this.confidence,
+    this.alternatives = const [],
+    this.title = '',
+    this.documentDate,
+    this.metadata = const {},
+  });
+
+  factory InboxSuggestion.fromJson(Map<String, dynamic> json) => InboxSuggestion(
+        documentType: json['document_type'] as String?,
+        confidence: (json['confidence'] as num?)?.toDouble(),
+        alternatives: ((json['alternatives'] as List?) ?? const [])
+            .map((e) => '$e')
+            .toList(),
+        title: json['title'] as String? ?? '',
+        documentDate: json['document_date'] as String?,
+        metadata:
+            ((json['metadata'] as Map?) ?? const {}).cast<String, dynamic>(),
       );
 }
