@@ -24,6 +24,20 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _tab = 0;
   bool _updateDismissed = false;
+  bool _updating = false;
+
+  Future<void> _installUpdate(String tarball) async {
+    setState(() => _updating = true);
+    try {
+      await installLinuxUpdate(tarball); // exits the app on success
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _updating = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Update fehlgeschlagen: $e')));
+    }
+  }
 
   // Each tab gets its own nested Navigator so that pushing a detail / browser
   // route stays inside the content area — the rail (or bottom nav) persists
@@ -191,13 +205,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      FilledButton(
-                        onPressed: () => launchUrl(
-                          Uri.parse(update.url),
-                          mode: LaunchMode.externalApplication,
+                      if (_updating)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      else if (update.tarball case final tarball?)
+                        FilledButton(
+                          onPressed: () => _installUpdate(tarball),
+                          child: const Text('Aktualisieren'),
+                        )
+                      else
+                        FilledButton(
+                          onPressed: () => launchUrl(
+                            Uri.parse(update.url),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          child: const Text('Herunterladen'),
                         ),
-                        child: const Text('Herunterladen'),
-                      ),
                       IconButton(
                         tooltip: 'Später',
                         icon: const Icon(Icons.close),
