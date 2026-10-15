@@ -21,6 +21,8 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl =
       TextEditingController(text: widget.existing?.name ?? '');
+  late final TextEditingController _descriptionCtrl =
+      TextEditingController(text: widget.existing?.description ?? '');
   late final TextEditingController _slugCtrl =
       TextEditingController(text: widget.existing?.slug ?? '');
   late String? _parentSlug = widget.existing?.parentSlug;
@@ -52,6 +54,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _descriptionCtrl.dispose();
     _slugCtrl.dispose();
     super.dispose();
   }
@@ -102,6 +105,7 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
     if (!_formKey.currentState!.validate()) return;
     final body = {
       'name': _nameCtrl.text.trim(),
+      'description': _descriptionCtrl.text.trim(),
       if (widget.existing == null) 'slug': _slugCtrl.text.trim(),
       'parent': _parentSlug,
       'retention_policy': _retentionPolicy,
@@ -328,6 +332,19 @@ class _TypeEditorScreenState extends ConsumerState<TypeEditorScreen> {
                     ),
                     validator: (v) =>
                         (v == null || v.trim().isEmpty) ? 'Pflichtfeld' : null,
+                    enabled: !_busy,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _descriptionCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Beschreibung',
+                      helperText: 'Woran man Dokumente dieses Typs erkennt — '
+                          'verbessert die Vorschläge im Eingang.',
+                      helperMaxLines: 2,
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
                     enabled: !_busy,
                   ),
                   const SizedBox(height: 12),

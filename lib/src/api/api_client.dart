@@ -375,13 +375,26 @@ class ApiClient {
 
   // ---- Previews ----
 
+  /// Cache-busting `r=` value per document uuid, set by the detail screen
+  /// when a reload shows a changed [Document.previewRevision]. The server
+  /// sends previews as no-cache, but the preview URLs stay the same across
+  /// edits and Flutter's ImageCache is keyed by URL alone.
+  final previewRevisions = <String, int>{};
+
+  String _revisionParam(String uuid) {
+    final r = previewRevisions[uuid];
+    return r == null ? '' : '&r=$r';
+  }
+
   /// URL for the latest-visible-version preview (list thumbnails).
   String documentPreviewUrl(String uuid, {String size = 'thumb', int page = 1}) =>
-      '$baseUrl/documents/$uuid/preview/?size=$size&page=$page';
+      '$baseUrl/documents/$uuid/preview/?size=$size&page=$page'
+      '${_revisionParam(uuid)}';
 
   String versionPreviewUrl(String uuid, int number,
           {String size = 'preview', int page = 1}) =>
-      '$baseUrl/documents/$uuid/versions/$number/preview?size=$size&page=$page';
+      '$baseUrl/documents/$uuid/versions/$number/preview?size=$size&page=$page'
+      '${_revisionParam(uuid)}';
 
   // ---- Search ----
 
@@ -536,6 +549,94 @@ class ApiClient {
         .toList();
   }
 
+  // ---- Live change feed ----
+
+  /// Opens `/events/` (Server-Sent Events). Completes when the server has
+  /// answered; the stream then emits each feed event and errors when the
+  /// connection drops. The server sends a keepalive every
+  /// 20 s, so the 60 s receive timeout (applied per chunk) detects a dead link.
+  Future<Stream<FeedEvent>> documentFeed() async {
+    final res = await _request<ResponseBody>('GET', '/events/',
+        responseType: ResponseType.stream);
+    return parseDocumentFeed(res.data!.stream);
+  }
+
+  /// Editing notice: PUT starts (repeat within 30 s), DELETE ends it.
+  Future<void> setEditing(String uuid, bool editing) async {
+    await _request(editing ? 'PUT' : 'DELETE', '/documents/$uuid/editing/');
+  }
+
+  // ---- Document inbox (inbox hand-off) ----
+
+  /// 403 = no inbox permission; the shell hides the tab then.
+  Future<Paginated<InboxItem>> inboxItems({
+    String? status,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _request('GET', '/inbox/', query: {
+      'status': ?status,
+      'limit': limit,
+      'offset': offset,
+    });
+    return Paginated.fromJson(_asMap(res.data), InboxItem.fromJson);
+  }
+
+  Future<InboxItem> inboxItem(String uuid) async {
+    final res = await _request('GET', '/inbox/$uuid/');
+    return InboxItem.fromJson(_asMap(res.data));
+  }
+
+  /// Original bytes; gone (404) once the item is accepted or rejected.
+  Future<Uint8List> inboxFile(String uuid) async {
+    final res = await _request<List<int>>('GET', '/inbox/$uuid/file/',
+        responseType: ResponseType.bytes);
+    return Uint8List.fromList(res.data!);
+  }
+
+  /// One multipart request; the `file` field repeats per file.
+  Future<List<InboxItem>> uploadInboxFiles(List<MultipartFile> files) async {
+    final form = FormData();
+    for (final f in files) {
+      form.files.add(MapEntry('file', f));
+    }
+    final res = await _request('POST', '/inbox/', data: form);
+    return (res.data as List)
+        .map((e) => InboxItem.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Files the item as a document; body as `POST documents/` without file.
+  Future<Document> acceptInboxItem(
+    String uuid, {
+    required String documentType,
+    required String title,
+    String? documentDate,
+    String? notes,
+    Map<String, dynamic> metadata = const {},
+    bool force = false,
+  }) async {
+    final res = await _request('POST', '/inbox/$uuid/accept/', data: {
+      'document_type': documentType,
+      'title': title,
+      'document_date': ?documentDate,
+      'notes': ?notes,
+      'metadata': metadata,
+      if (force) 'force': true,
+    });
+    return Document.fromJson(_asMap(res.data));
+  }
+
+  Future<InboxItem> rejectInboxItem(String uuid) async {
+    final res = await _request('POST', '/inbox/$uuid/reject/');
+    return InboxItem.fromJson(_asMap(res.data));
+  }
+
+  Future<InboxItem> reprocessInboxItem(String uuid) async {
+    final res = await _request('POST', '/inbox/$uuid/reprocess/');
+    return InboxItem.fromJson(_asMap(res.data));
+  }
+
   // ---- Admin: document types ----
 
   Future<DocumentType> createDocumentType(Map<String, dynamic> body) async {
@@ -645,5 +746,32 @@ class ApiClient {
 
   Future<void> deleteStorage(int id) async {
     await _request('DELETE', '/storages/$id/');
+  }
+}
+
+/// Server-Sent Events parser for `/events/`: events end at a blank line,
+/// comment lines (`: keepalive`) and `retry:` are ignored.
+Stream<FeedEvent> parseDocumentFeed(Stream<List<int>> bytes) async* {
+  String? event;
+  final data = StringBuffer();
+  // bind, not bytes.transform(utf8.decoder): Dio delivers Stream<Uint8List>,
+  // and transform() would demand a StreamTransformer<Uint8List, …>.
+  await for (final line
+      in utf8.decoder.bind(bytes).transform(const LineSplitter())) {
+    if (line.isEmpty) {
+      if (event == 'document_changed' || event == 'document_editing') {
+        final json = jsonDecode(data.toString()) as Map<String, dynamic>;
+        yield event == 'document_changed'
+            ? DocumentChange(
+                json['document'] as String, json['action'] as String)
+            : DocumentEditing.fromJson(json);
+      }
+      event = null;
+      data.clear();
+    } else if (line.startsWith('event:')) {
+      event = line.substring(6).trim();
+    } else if (line.startsWith('data:')) {
+      data.write(line.substring(5).trim());
+    }
   }
 }

@@ -252,6 +252,32 @@ void main() {
       expect(doc.latestPendingVersion?.number, 1);
     });
 
+    test('previewRevision follows renderings, not extraction progress', () {
+      int rev(Map<String, dynamic> v, {Map meta = const {'a': '1'}}) =>
+          Document.fromJson({
+            'uuid': 'u1',
+            'title': 'T',
+            'document_type': 'invoice',
+            'date_added': '2026-07-20T10:00:00Z',
+            'added_by': 'alice',
+            'metadata': meta,
+            'versions': [v],
+          }).previewRevision;
+      final base = rev(versionJson(1, approval: 'pending'));
+      expect(
+        rev({...versionJson(1, approval: 'pending'), 'extraction_status': 'running'}),
+        base,
+      );
+      expect(
+        rev({...versionJson(1, approval: 'pending'), 'checksum_sha256': 'new'}),
+        isNot(base),
+      );
+      expect(rev(versionJson(1, approval: 'released', releasedBy: 'bob')),
+          isNot(base));
+      expect(rev(versionJson(1, approval: 'pending'), meta: {'a': '2'}),
+          isNot(base));
+    });
+
     test('VersionEvent parses approval fields and proposed_diff', () {
       final e = TimelineEvent.fromJson({
         'kind': 'version',
@@ -503,5 +529,43 @@ void main() {
       expect(storageName(storages, 99), '#99');
       expect(storageName(storages, null), '—');
     });
+  });
+
+  test('InboxItem: empty suggestion is null, fields parse', () {
+    final processing = InboxItem.fromJson({
+      'uuid': 'a',
+      'status': 'processing',
+      'original_filename': 'scan.pdf',
+      'suggestion': {},
+      'duplicate_of': [],
+    });
+    expect(processing.suggestion, isNull);
+    expect(processing.isOpen, isTrue);
+
+    final ready = InboxItem.fromJson({
+      'uuid': 'b',
+      'status': 'ready',
+      'original_filename': 'rechnung.pdf',
+      'size': 1234,
+      'duplicate_of': ['d1'],
+      'uploaded_at': '2026-10-07T10:00:00Z',
+      'suggestion': {
+        'document_type': 'invoice',
+        'confidence': 0.87,
+        'alternatives': ['receipt'],
+        'title': 'Rechnung 42',
+        'document_date': '2026-10-01',
+        'metadata': {'amount': '12.50'},
+      },
+    });
+    expect(ready.duplicateOf, ['d1']);
+    expect(ready.suggestion!.documentType, 'invoice');
+    expect(ready.suggestion!.alternatives, ['receipt']);
+    // Monetary stays a string.
+    expect(ready.suggestion!.metadata['amount'], '12.50');
+    expect(
+      InboxItem.fromJson({'uuid': 'c', 'status': 'accepted'}).isOpen,
+      isFalse,
+    );
   });
 }

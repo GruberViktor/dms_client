@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import 'src/screens/home_screen.dart';
 import 'src/screens/login_screen.dart';
+import 'src/state/deep_links.dart';
 import 'src/state/session.dart';
 import 'src/theme/adwaita_theme.dart';
 
@@ -32,6 +33,8 @@ class DmsApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
+    // Start catching luvi-dms:// links before login; HomeScreen consumes them.
+    ref.listen(pendingDeepLinkProvider, (_, _) {});
     return MaterialApp(
       title: 'LUVI Docs',
       navigatorKey: _rootNavigatorKey,

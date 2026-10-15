@@ -139,17 +139,25 @@ Version=1.0
 Name=$APP_NAME
 GenericName=Document Management
 Comment=Client for the LUVI Fermente document management system
-Exec=$APP_DIR/$BIN_NAME
+Exec=$APP_DIR/$BIN_NAME %u
 Icon=$ICON_VALUE
 Terminal=false
 Categories=Office;
 Keywords=DMS;Documents;Archive;
 StartupNotify=true
 StartupWMClass=$APP_ID
+MimeType=x-scheme-handler/luvi-dms;
 EOF
 chmod 644 "$DESKTOP_FILE"
 
 refresh_caches
+
+# Make luvi-dms:// links (e.g. in notification emails) open the app. A system
+# install relies on update-desktop-database above; xdg-mime under sudo would
+# only set root's default.
+if [ "$MODE" = "user" ] && command -v xdg-mime >/dev/null 2>&1; then
+    xdg-mime default "$APP_ID.desktop" x-scheme-handler/luvi-dms || true
+fi
 
 echo
 echo "$APP_NAME installed."

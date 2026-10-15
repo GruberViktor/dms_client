@@ -60,6 +60,20 @@ bool canDownloadAsPdf(String? mime) {
       m.contains('vnd.jgraph.mxfile');
 }
 
+/// Markdown source we can render in-app from the extracted text.
+/// libmagic sniffs `.md` as `text/plain` far more often than `text/markdown`,
+/// so the filename decides and the mime only has to be textual (or unknown,
+/// e.g. while a version row carries no mime yet).
+bool isMarkdown(String? mime, String? filename) {
+  final m = mime ?? '';
+  if (m.isNotEmpty && !m.startsWith('text/')) return false;
+  final n = (filename ?? '').toLowerCase();
+  return n.endsWith('.md') ||
+      n.endsWith('.markdown') ||
+      n.endsWith('.mdown') ||
+      n.endsWith('.mkd');
+}
+
 /// Whether `…/download/pdf` (and `…/view/pdf`) has something to serve: PDF
 /// originals as-is, convertible formats rendered.
 bool hasPdfRendition(String? mime) => isPdfMime(mime) || canDownloadAsPdf(mime);

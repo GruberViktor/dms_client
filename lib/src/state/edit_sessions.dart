@@ -10,6 +10,7 @@ import 'package:watcher/watcher.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import 'editors.dart';
 import 'session.dart';
 
 /// Desktop round-trip editing (spec §7 M3): download a version to a temp
@@ -57,6 +58,7 @@ class EditSession {
 class EditSessionsNotifier extends Notifier<Map<String, EditSession>> {
   final _subs = <String, StreamSubscription<WatchEvent>>{};
   final _debounce = <String, Timer>{};
+  final _announcements = <String, EditingAnnouncement>{};
 
   @override
   Map<String, EditSession> build() {
@@ -69,8 +71,12 @@ class EditSessionsNotifier extends Notifier<Map<String, EditSession>> {
       for (final t in _debounce.values) {
         t.cancel();
       }
+      for (final a in _announcements.values) {
+        a.cancel();
+      }
       _subs.clear();
       _debounce.clear();
+      _announcements.clear();
     });
     return {};
   }
@@ -106,12 +112,14 @@ class EditSessionsNotifier extends Notifier<Map<String, EditSession>> {
     };
     _subs[doc.uuid] =
         FileWatcher(file.path).events.listen((e) => _onEvent(doc.uuid));
+    _announcements[doc.uuid] = EditingAnnouncement(api, doc.uuid);
     await openExternally(file.path);
   }
 
   void stop(String uuid) {
     _subs.remove(uuid)?.cancel();
     _debounce.remove(uuid)?.cancel();
+    _announcements.remove(uuid)?.stop();
     if (state.containsKey(uuid)) {
       state = {...state}..remove(uuid);
     }

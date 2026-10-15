@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../util/open_file.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -12,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import '../state/document_feed.dart';
 import '../state/edit_sessions.dart';
 import '../state/permissions.dart';
 import '../state/session.dart';
@@ -19,6 +21,7 @@ import '../state/watches.dart';
 import '../util/format.dart';
 import '../util/version_files.dart';
 import '../widgets/common.dart';
+import '../widgets/editors_banner.dart';
 import '../widgets/file_drag.dart';
 import '../widgets/timeline.dart';
 import 'edit_document_screen.dart';
@@ -39,7 +42,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   List<DocumentComment>? _comments;
   Object? _error;
   Timer? _pollTimer;
+  Timer? _changeDebounce;
   bool _busy = false;
+  // Timeline shows view/download events only on request.
+  bool _showAccessEvents = false;
+  // Version picked in the versions card for the preview; null = default.
+  int? _selectedVersion;
   // Versions whose release hit the four-eyes 403 (`approval_required`): the
   // button stays visible but disabled with a hint — unlike a plain 403,
   // which drops release_version for the whole type (hand-off §4).
@@ -54,6 +62,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _changeDebounce?.cancel();
     super.dispose();
   }
 
@@ -75,6 +84,12 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         comments = null;
       }
       if (!mounted) return;
+      // Our own edit (or one seen on refresh) changed the rendering: give the
+      // preview URLs a new `r=` so the viewers and the list thumbnails
+      // refetch. The first load keeps the cached images.
+      if (_doc != null && _doc!.previewRevision != doc.previewRevision) {
+        api.previewRevisions[doc.uuid] = doc.previewRevision;
+      }
       setState(() {
         _doc = doc;
         _events = events;
@@ -233,8 +248,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   /// toggle is optimistic, the notifier reverts on failure.
   Future<void> _toggleWatch() async {
     try {
-      final on =
-          await ref.read(watchesProvider.notifier).toggleDocument(_doc!.uuid);
+      final on = await ref
+          .read(watchesProvider.notifier)
+          .toggleDocument(_doc!.uuid);
       if (mounted) {
         showSnack(
           context,
@@ -280,6 +296,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   }) async {
     final picked = file ?? await _pickMultipart();
     if (picked == null || !mounted) return;
+    final pendingBefore = _doc!.latestPendingVersion?.number;
     setState(() => _busy = true);
     try {
       // Whether the version needs a release is the server's call — read it
@@ -290,7 +307,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       if (mounted) {
         showSnack(
           context,
-          v.isPending
+          v.number == pendingBefore
+              ? 'Datei der Version ${v.number} ersetzt — wartet auf Freigabe.'
+              : v.isPending
               ? 'Version ${v.number} hochgeladen — wartet auf Freigabe.'
               : 'Neue Version hochgeladen.',
         );
@@ -493,13 +512,16 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
 
   Future<bool> _editComment(DocumentComment c, String body) async {
     try {
-      final updated =
-          await ref.read(apiProvider).patchComment(_doc!.uuid, c.id, body);
+      final updated = await ref
+          .read(apiProvider)
+          .patchComment(_doc!.uuid, c.id, body);
       if (!mounted) return true;
-      setState(() => _comments = [
-            for (final x in _comments ?? const <DocumentComment>[])
-              x.id == c.id ? updated : x,
-          ]);
+      setState(
+        () => _comments = [
+          for (final x in _comments ?? const <DocumentComment>[])
+            x.id == c.id ? updated : x,
+        ],
+      );
       _refreshEvents();
       return true;
     } on ApiException catch (e) {
@@ -545,8 +567,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       }
     }
     if (!mounted) return;
-    setState(() => _comments =
-        [...?_comments]..removeWhere((x) => x.id == c.id));
+    setState(
+      () => _comments = [...?_comments]..removeWhere((x) => x.id == c.id),
+    );
     _refreshEvents();
   }
 
@@ -635,11 +658,19 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
   }
 
   Future<void> _editUploadNewVersion() async {
+    final pendingBefore = _doc!.latestPendingVersion?.number;
     try {
       await ref
           .read(editSessionsProvider.notifier)
           .uploadAsNewVersion(_doc!.uuid);
-      if (mounted) showSnack(context, 'Als neue Version hochgeladen.');
+      if (mounted) {
+        showSnack(
+          context,
+          pendingBefore != null
+              ? 'Datei der Version $pendingBefore ersetzt.'
+              : 'Als neue Version hochgeladen.',
+        );
+      }
       await _load();
     } on ApiException catch (e) {
       if (e.isForbidden) _recordDenied('upload_version');
@@ -674,7 +705,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     // §7 "replace resets release": warn when approvals plausibly apply. The
     // effective mode is resolved client-side and only feeds this warning —
     // the response's approval_status is what we act on.
-    final approvalGated = effectiveApprovalMode(
+    final approvalGated =
+        effectiveApprovalMode(
           ref.read(documentTypesBySlugProvider),
           _doc!.documentType,
         ) !=
@@ -688,9 +720,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           'Um den Verlauf zu erhalten, laden Sie stattdessen eine neue '
           'Version hoch.'
           '${approvalGated && !v.isPending ? '\n\nDieser Typ erfordert eine '
-              'Freigabe: Die ersetzte Version fällt zurück auf „wartet auf '
-              'Freigabe“, und das Dokument zeigt bis zur erneuten Freigabe '
-              'wieder den zuvor freigegebenen Inhalt.' : ''}',
+                    'Freigabe: Die ersetzte Version fällt zurück auf „wartet auf '
+                    'Freigabe“, und das Dokument zeigt bis zur erneuten Freigabe '
+                    'wieder den zuvor freigegebenen Inhalt.' : ''}',
         ),
         actions: [
           TextButton(
@@ -715,8 +747,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           context,
           replaced.isPending
               ? 'Datei ersetzt — Version ${replaced.number} wartet auf '
-                  'Freigabe; bis dahin zeigt das Dokument den zuvor '
-                  'freigegebenen Inhalt.'
+                    'Freigabe; bis dahin zeigt das Dokument den zuvor '
+                    'freigegebenen Inhalt.'
               : 'Datei ersetzt.',
         );
       }
@@ -736,6 +768,17 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Someone (maybe we) changed this document: reload. Debounced, because
+    // one upload sends create + version_upload + extraction_done.
+    ref.listen(documentFeedProvider, (_, next) {
+      final change = next.value;
+      if (change is! DocumentChange ||
+          (change.uuid != null && change.uuid != widget.uuid)) {
+        return;
+      }
+      _changeDebounce?.cancel();
+      _changeDebounce = Timer(const Duration(milliseconds: 500), _load);
+    });
     final doc = _doc;
     if (_error != null) {
       return Scaffold(
@@ -761,6 +804,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     // Optimistic like the rest of §5: shown until a plain 403 denies it.
     final canRelease = !denied.isDenied(doc.documentType, 'release_version');
     final pending = doc.latestPendingVersion;
+    // Preview the version picked in the versions card, else the pending
+    // proposal (showing the old content while a release waits is
+    // confusing), else the released content. Per-version previews are open
+    // to anyone with `view` (§5).
+    final previewVersion =
+        doc.versions.where((v) => v.number == _selectedVersion).firstOrNull ??
+        pending ??
+        current;
     // No "may I comment?" flag exists — show the composer optimistically and
     // drop it for this type after a 403 (hand-off §5).
     final canComment = !denied.isDenied(doc.documentType, 'comment');
@@ -770,12 +821,14 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final infoColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        EditorsBanner(uuid: doc.uuid),
         if (editSession != null) ...[
           _EditSessionBanner(
             session: editSession,
             canUpload: canUpload,
             approvalGated:
                 effectiveApprovalMode(bySlug, doc.documentType) != 'none',
+            pendingNumber: pending?.number,
             onUploadNewVersion: _editUploadNewVersion,
             onReplaceFile: _editReplaceFile,
             onStop: () =>
@@ -815,6 +868,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           onReExtract: (_busy || !canUpload) ? null : _reExtract,
           onRelease: (_busy || !canRelease) ? null : _releaseVersion,
           fourEyesBlocked: _fourEyesBlocked,
+          previewNumber: previewVersion?.number,
+          onSelect: (v) => setState(() => _selectedVersion = v.number),
         ),
         const SizedBox(height: 12),
         _CommentsCard(
@@ -836,15 +891,28 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Verlauf',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Row(
+                  children: [
+                    Text(
+                      'Verlauf',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    FilterChip(
+                      label: const Text('detailiert'),
+                      selected: _showAccessEvents,
+                      onSelected: (v) => setState(() => _showAccessEvents = v),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 if (_events == null)
                   const Text('Verlauf nicht verfügbar.')
                 else
-                  DocumentTimeline(events: _events!),
+                  DocumentTimeline(
+                    events: _events!,
+                    showAccessEvents: _showAccessEvents,
+                  ),
               ],
             ),
           ),
@@ -855,22 +923,72 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     // PDFs (and office/draw.io via server-side conversion) render in-app
     // with a real text layer; everything else uses the server preview
     // images.
-    // Preview the released content; if none exists (only-released version
-    // replaced, §7), fall back to the pending proposal — its per-version
-    // preview is open to anyone with `view` (§5).
-    final previewVersion = current ?? pending;
-    final preview = previewVersion == null
+    // Markdown has neither a PDF rendition nor server preview images, but the
+    // extractor stores text files verbatim — so `content` *is* the source.
+    // It belongs to the effective (released) version, hence only that one is
+    // rendered; a pending proposal falls through to the icon fallback.
+    final markdownSource =
+        previewVersion != null &&
+            previewVersion.number == current?.number &&
+            isMarkdown(previewVersion.mimeType, previewVersion.originalFilename)
+        ? (doc.content ?? '')
+        : null;
+    final previewBody = previewVersion == null
         ? const SizedBox.shrink()
+        : markdownSource != null && markdownSource.trim().isNotEmpty
+        ? _MarkdownPreview(source: markdownSource)
         : hasPdfRendition(previewVersion.mimeType)
         ? _PdfPreview(
             api: ref.read(apiProvider),
             uuid: doc.uuid,
             version: previewVersion,
+            revision: ref.read(apiProvider).previewRevisions[doc.uuid],
           )
         : _PreviewPager(
+            // new version → start again on page 1
+            key: ValueKey(previewVersion.number),
             api: ref.read(apiProvider),
             uuid: doc.uuid,
             version: previewVersion,
+          );
+    // The current version needs no marker; any other one gets a corner
+    // banderole so it is not mistaken for the document's content.
+    final scheme = Theme.of(context).colorScheme;
+    final preview =
+        previewVersion == null || previewVersion.number == current?.number
+        ? previewBody
+        // the clip cuts the corner banner's ends
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              children: [
+                Positioned.fill(child: previewBody),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: CornerBanner(
+                    scale: 1.6,
+                    message:
+                        'v${previewVersion.number} '
+                        '${previewVersion.isHidden
+                            ? 'verborgen'
+                            : previewVersion.isPending
+                            ? 'Entwurf'
+                            : 'veraltet'}',
+                    color: previewVersion.isHidden
+                        ? scheme.outline
+                        : previewVersion.isPending
+                        ? scheme.tertiary
+                        : scheme.errorContainer,
+                    textColor: previewVersion.isHidden
+                        ? scheme.surface
+                        : previewVersion.isPending
+                        ? scheme.onTertiary
+                        : scheme.onErrorContainer,
+                  ),
+                ),
+              ],
+            ),
           );
 
     return Scaffold(
@@ -887,7 +1005,9 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: watching ? 'Nicht mehr beobachten' : 'Änderungen beobachten',
+            tooltip: watching
+                ? 'Nicht mehr beobachten'
+                : 'Änderungen beobachten',
             icon: Icon(
               watching
                   ? Icons.notifications_active
@@ -901,18 +1021,21 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               icon: const Icon(Icons.edit_outlined),
               onPressed: _busy ? null : _editDocument,
             ),
-          if (current != null)
+          // act on the previewed version, so the buttons match what is shown
+          if (previewVersion != null)
             IconButton(
-              tooltip: 'Herunterladen & öffnen',
+              tooltip: 'v${previewVersion.number} herunterladen & öffnen',
               icon: const Icon(Icons.open_in_new),
-              onPressed: _busy ? null : () => _downloadAndOpen(current),
+              onPressed: _busy ? null : () => _downloadAndOpen(previewVersion),
             ),
-          if (current != null && hasPdfRendition(current.mimeType))
+          if (previewVersion != null &&
+              hasPdfRendition(previewVersion.mimeType))
             IconButton(
-              tooltip: 'Als PDF herunterladen',
+              tooltip: 'v${previewVersion.number} als PDF herunterladen',
               icon: const Icon(Icons.picture_as_pdf_outlined),
-              onPressed:
-                  _busy ? null : () => _downloadAndOpen(current, asPdf: true),
+              onPressed: _busy
+                  ? null
+                  : () => _downloadAndOpen(previewVersion, asPdf: true),
             ),
           IconButton(
             tooltip: doc.archived ? 'Dearchivieren' : 'Archivieren',
@@ -1170,8 +1293,9 @@ class _CommentsCardState extends State<_CommentsCard> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final comments = widget.comments;
-    final muted =
-        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1198,7 +1322,9 @@ class _CommentsCardState extends State<_CommentsCard> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _editingId == c.id ? _editor(c) : _tile(c),
                 ),
-            if (widget.canCompose) _composer() else ...[
+            if (widget.canCompose)
+              _composer()
+            else ...[
               const SizedBox(height: 4),
               Text(
                 'Sie dürfen bei diesem Dokumenttyp nicht kommentieren.',
@@ -1214,8 +1340,9 @@ class _CommentsCardState extends State<_CommentsCard> {
   Widget _tile(DocumentComment c) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final muted =
-        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1225,23 +1352,25 @@ class _CommentsCardState extends State<_CommentsCard> {
           children: [
             Expanded(
               child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: c.author,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  TextSpan(
-                    text: '  ${formatDateTime(c.createdAt)}',
-                    style: muted,
-                  ),
-                  if (c.isEdited)
+                TextSpan(
+                  children: [
                     TextSpan(
-                      text: c.editedBy != null && c.editedBy != c.author
-                          ? ' · bearbeitet von ${c.editedBy}'
-                          : ' · bearbeitet',
-                      style: muted?.copyWith(fontStyle: FontStyle.italic),
+                      text: c.author,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                ]),
+                    TextSpan(
+                      text: '  ${formatDateTime(c.createdAt)}',
+                      style: muted,
+                    ),
+                    if (c.isEdited)
+                      TextSpan(
+                        text: c.editedBy != null && c.editedBy != c.author
+                            ? ' · bearbeitet von ${c.editedBy}'
+                            : ' · bearbeitet',
+                        style: muted?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                  ],
+                ),
                 style: theme.textTheme.bodyMedium,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1254,9 +1383,9 @@ class _CommentsCardState extends State<_CommentsCard> {
                 onPressed: _sending
                     ? null
                     : () => setState(() {
-                          _editingId = c.id;
-                          _editCtrl.text = c.body;
-                        }),
+                        _editingId = c.id;
+                        _editCtrl.text = c.body;
+                      }),
               ),
             if (c.canDelete)
               IconButton(
@@ -1272,10 +1401,7 @@ class _CommentsCardState extends State<_CommentsCard> {
         Text.rich(
           _withMentionStyle(
             c.body,
-            TextStyle(
-              color: scheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
+            TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
           ),
           style: theme.textTheme.bodyMedium,
         ),
@@ -1298,8 +1424,9 @@ class _CommentsCardState extends State<_CommentsCard> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             TextButton(
-              onPressed:
-                  _sending ? null : () => setState(() => _editingId = null),
+              onPressed: _sending
+                  ? null
+                  : () => setState(() => _editingId = null),
               child: const Text('Abbrechen'),
             ),
             const SizedBox(width: 8),
@@ -1358,7 +1485,8 @@ TextSpan _withMentionStyle(String body, TextStyle mentionStyle) {
   final children = <TextSpan>[];
   var last = 0;
   for (final m in _mentionRe.allMatches(body)) {
-    if (m.start > last) children.add(TextSpan(text: body.substring(last, m.start)));
+    if (m.start > last)
+      children.add(TextSpan(text: body.substring(last, m.start)));
     children.add(TextSpan(text: m.group(0), style: mentionStyle));
     last = m.end;
   }
@@ -1454,8 +1582,7 @@ class _MentionFieldState extends State<_MentionField> {
     final replaced = '@${u.username} ';
     widget.controller.value = TextEditingValue(
       text: value.text.replaceRange(_tokenStart, cursor, replaced),
-      selection:
-          TextSelection.collapsed(offset: _tokenStart + replaced.length),
+      selection: TextSelection.collapsed(offset: _tokenStart + replaced.length),
     );
     _clear();
   }
@@ -1523,6 +1650,8 @@ class _EditSessionBanner extends StatelessWidget {
   final bool canUpload;
   // Approvals may apply to this type (client-side resolved, warning only).
   final bool approvalGated;
+  // Number of the version awaiting release; every upload replaces its file.
+  final int? pendingNumber;
   final VoidCallback onUploadNewVersion;
   final VoidCallback onReplaceFile;
   final VoidCallback onStop;
@@ -1531,6 +1660,7 @@ class _EditSessionBanner extends StatelessWidget {
     required this.session,
     required this.canUpload,
     required this.approvalGated,
+    required this.pendingNumber,
     required this.onUploadNewVersion,
     required this.onReplaceFile,
     required this.onStop,
@@ -1588,15 +1718,19 @@ class _EditSessionBanner extends StatelessWidget {
             if (changed) ...[
               const SizedBox(height: 8),
               Text(
-                (session.compliance
-                        ? 'Dieses Dokument unterliegt der Aufbewahrungspflicht: '
-                              'Die Änderung kann nur als Version '
-                              '${session.versionNumber + 1} hochgeladen werden.'
-                        : 'Änderung als Version '
-                              '${session.versionNumber + 1} hochladen oder die '
-                              'Datei der Version ${session.versionNumber} direkt '
-                              'überschreiben.') +
-                    (approvalGated
+                (pendingNumber != null
+                        ? 'Version $pendingNumber wartet auf Freigabe: Die Änderung '
+                              'ersetzt deren Datei, eine weitere Version ist bis zur '
+                              'Freigabe nicht möglich.'
+                        : (session.compliance
+                              ? 'Dieses Dokument unterliegt der Aufbewahrungspflicht: '
+                                    'Die Änderung kann nur als Version '
+                                    '${session.versionNumber + 1} hochgeladen werden.'
+                              : 'Änderung als Version '
+                                    '${session.versionNumber + 1} hochladen oder die '
+                                    'Datei der Version ${session.versionNumber} direkt '
+                                    'überschreiben.')) +
+                    (pendingNumber == null && approvalGated
                         ? ' Dieser Typ erfordert eine Freigabe — das Ergebnis '
                               'wartet auf Freigabe, bevor es zum Dokument wird.'
                         : ''),
@@ -1607,16 +1741,23 @@ class _EditSessionBanner extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  // the server routes this upload into the pending version
                   FilledButton.icon(
                     onPressed: canUpload ? onUploadNewVersion : null,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: Text('Als v${session.versionNumber + 1} hochladen'),
+                    label: Text(
+                      pendingNumber != null
+                          ? 'Datei in v$pendingNumber ersetzen'
+                          : 'Als v${session.versionNumber + 1} hochladen',
+                    ),
                   ),
-                  if (!session.compliance)
+                  if (pendingNumber == null && !session.compliance)
                     OutlinedButton.icon(
                       onPressed: canUpload ? onReplaceFile : null,
                       icon: const Icon(Icons.find_replace, size: 18),
-                      label: Text('Datei in v${session.versionNumber} ersetzen'),
+                      label: Text(
+                        'Datei in v${session.versionNumber} ersetzen',
+                      ),
                     ),
                 ],
               ),
@@ -1665,9 +1806,11 @@ class _PendingReleaseBanner extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.pending_actions,
-                    size: 18,
-                    color: dark ? Colors.amber.shade200 : Colors.amber.shade900),
+                Icon(
+                  Icons.pending_actions,
+                  size: 18,
+                  color: dark ? Colors.amber.shade200 : Colors.amber.shade900,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -1683,11 +1826,11 @@ class _PendingReleaseBanner extends StatelessWidget {
             Text(
               noReleasedContent
                   ? 'Derzeit existiert keine freigegebene Version — das '
-                      'Dokument hat keinen wirksamen Inhalt, bis diese Version '
-                      'freigegeben wird.'
+                        'Dokument hat keinen wirksamen Inhalt, bis diese Version '
+                        'freigegeben wird.'
                   : 'Das Dokument zeigt weiterhin den zuvor freigegebenen '
-                      'Inhalt. Die vorgeschlagenen Änderungen finden Sie im '
-                      'Verlauf weiter unten.',
+                        'Inhalt. Die vorgeschlagenen Änderungen finden Sie im '
+                        'Verlauf weiter unten.',
               style: theme.textTheme.bodySmall,
             ),
             if (canRelease) ...[
@@ -1705,8 +1848,9 @@ class _PendingReleaseBanner extends StatelessWidget {
                       child: Text(
                         'Vier-Augen-Prinzip: Eine andere Person muss '
                         'freigeben.',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                 ],
@@ -1733,6 +1877,8 @@ class _VersionsCard extends StatelessWidget {
   final void Function(DocumentVersion)? onReExtract;
   final void Function(DocumentVersion)? onRelease;
   final Set<int> fourEyesBlocked;
+  final int? previewNumber;
+  final void Function(DocumentVersion) onSelect;
 
   const _VersionsCard({
     required this.doc,
@@ -1748,6 +1894,8 @@ class _VersionsCard extends StatelessWidget {
     required this.onReExtract,
     required this.onRelease,
     required this.fourEyesBlocked,
+    required this.previewNumber,
+    required this.onSelect,
   });
 
   /// Download button that can also be dragged out as the file itself
@@ -1798,11 +1946,17 @@ class _VersionsCard extends StatelessWidget {
                 Expanded(
                   child: Text('Versionen', style: theme.textTheme.titleMedium),
                 ),
+                // While a version awaits release the server replaces its file
+                // instead of adding a further version.
                 if (onUploadVersion != null)
                   FilledButton.tonalIcon(
                     onPressed: onUploadVersion,
                     icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('Neue Version'),
+                    label: Text(
+                      doc.latestPendingVersion != null
+                          ? 'Datei in v${doc.latestPendingVersion!.number} ersetzen'
+                          : 'Neue Version',
+                    ),
                   ),
               ],
             ),
@@ -1810,7 +1964,13 @@ class _VersionsCard extends StatelessWidget {
             for (final v in versions)
               ListTile(
                 dense: true,
-                contentPadding: EdgeInsets.zero,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                selected: v.number == previewNumber,
+                selectedTileColor: theme.colorScheme.secondaryContainer,
+                onTap: () => onSelect(v),
                 leading: Icon(
                   mimeIcon(v.mimeType),
                   color: v.isHidden
@@ -1824,8 +1984,9 @@ class _VersionsCard extends StatelessWidget {
                         'v${v.number} · ${v.originalFilename}',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          decoration:
-                              v.isHidden ? TextDecoration.lineThrough : null,
+                          decoration: v.isHidden
+                              ? TextDecoration.lineThrough
+                              : null,
                           color: v.isHidden ? theme.colorScheme.outline : null,
                           fontWeight: v.number == currentNumber
                               ? FontWeight.w600
@@ -1833,11 +1994,6 @@ class _VersionsCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (!v.isHidden && v.isPending)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 6),
-                        child: PendingReleaseBadge(),
-                      ),
                   ],
                 ),
                 subtitle: Text(
@@ -1859,7 +2015,7 @@ class _VersionsCard extends StatelessWidget {
                       IconButton(
                         tooltip: fourEyesBlocked.contains(v.number)
                             ? 'Vier-Augen-Prinzip: Eine andere Person muss '
-                                'freigeben'
+                                  'freigeben'
                             : 'Diese Version freigeben',
                         icon: const Icon(Icons.task_alt, size: 20),
                         onPressed: fourEyesBlocked.contains(v.number)
@@ -1869,15 +2025,10 @@ class _VersionsCard extends StatelessWidget {
                     if (!v.isHidden) ...[
                       if (onOpenEdit != null)
                         IconButton(
-                          tooltip: 'Öffnen & bearbeiten (Änderungen überwachen)',
+                          tooltip:
+                              'Öffnen & bearbeiten (Änderungen überwachen)',
                           icon: const Icon(Icons.edit_document, size: 20),
                           onPressed: () => onOpenEdit!(v),
-                        ),
-                      if (onReplaceFile != null)
-                        IconButton(
-                          tooltip: 'Datei direkt ersetzen',
-                          icon: const Icon(Icons.find_replace, size: 20),
-                          onPressed: () => onReplaceFile!(v),
                         ),
                       _draggableButton(
                         v,
@@ -1971,15 +2122,123 @@ class _VersionsCard extends StatelessWidget {
 /// zoom. Native PDFs load their original bytes; office/draw.io go through
 /// the server's on-the-fly PDF conversion. If the fetch fails we fall back to
 /// the server-rendered preview images.
+/// Rendered Markdown preview. The source is the extracted text of the
+/// version (text files are stored verbatim by the extractor), so this costs
+/// no extra request and is not audited as a second view.
+class _MarkdownPreview extends StatelessWidget {
+  final String source;
+
+  const _MarkdownPreview({required this.source});
+
+  Future<void> _openLink(BuildContext context, String? href) async {
+    final uri = href == null ? null : Uri.tryParse(href);
+    // Only absolute web/mail links: relative links point into the document
+    // set, which has no in-app route.
+    if (uri == null ||
+        !const {'http', 'https', 'mailto'}.contains(uri.scheme)) {
+      return;
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Link konnte nicht geöffnet werden: $href')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Markdown(
+        data: source,
+        selectable: true,
+        padding: const EdgeInsets.all(20),
+        onTapLink: (text, href, title) => _openLink(context, href),
+        // Relative image paths have no meaning here (the file lives in object
+        // storage), so only absolute web images are fetched — anything else
+        // shows its alt text instead of an asset-loading error.
+        imageBuilder: (uri, title, alt) =>
+            uri.scheme == 'http' || uri.scheme == 'https'
+            ? Image.network(
+                uri.toString(),
+                errorBuilder: (context, e, st) => _MarkdownImageStub(alt: alt),
+              )
+            : _MarkdownImageStub(alt: alt ?? uri.toString()),
+        styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+          p: theme.textTheme.bodyMedium,
+          code: theme.textTheme.bodySmall?.copyWith(
+            fontFamily: 'monospace',
+            backgroundColor: scheme.surfaceContainerHighest,
+          ),
+          codeblockDecoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          blockquoteDecoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          horizontalRuleDecoration: BoxDecoration(
+            border: Border(top: BorderSide(color: scheme.outlineVariant)),
+          ),
+          tableBorder: TableBorder.all(color: scheme.outlineVariant),
+          a: TextStyle(
+            color: scheme.primary,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkdownImageStub extends StatelessWidget {
+  final String? alt;
+
+  const _MarkdownImageStub({this.alt});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.image_not_supported_outlined,
+          size: 18,
+          color: scheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            (alt ?? '').isEmpty ? 'Bild' : alt!,
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _PdfPreview extends StatefulWidget {
   final ApiClient api;
   final String uuid;
   final DocumentVersion version;
+  // ApiClient.previewRevisions entry: a change refetches the same version.
+  final int? revision;
 
   const _PdfPreview({
     required this.api,
     required this.uuid,
     required this.version,
+    required this.revision,
   });
 
   @override
@@ -2000,7 +2259,9 @@ class _PdfPreviewState extends State<_PdfPreview> {
   @override
   void didUpdateWidget(_PdfPreview old) {
     super.didUpdateWidget(old);
-    if (old.uuid != widget.uuid || old.version.number != widget.version.number) {
+    if (old.uuid != widget.uuid ||
+        old.version.number != widget.version.number ||
+        old.revision != widget.revision) {
       setState(() {
         _bytes = null;
         _failed = false;
@@ -2022,8 +2283,10 @@ class _PdfPreviewState extends State<_PdfPreview> {
       // Silent fallback to preview images, but say why in debug builds —
       // otherwise a broken/renamed route is indistinguishable from
       // "this format has no PDF rendition".
-      debugPrint('view/pdf failed for ${widget.uuid} v${v.number} '
-          '(${e is ApiException ? 'HTTP ${e.statusCode}' : e.runtimeType}): $e');
+      debugPrint(
+        'view/pdf failed for ${widget.uuid} v${v.number} '
+        '(${e is ApiException ? 'HTTP ${e.statusCode}' : e.runtimeType}): $e',
+      );
       if (!mounted) return;
       setState(() => _failed = true);
     }
@@ -2049,7 +2312,9 @@ class _PdfPreviewState extends State<_PdfPreview> {
           ? const Center(child: CircularProgressIndicator())
           : PdfViewer.data(
               _bytes!,
-              sourceName: '${widget.uuid}/v${widget.version.number}',
+              // pdfrx shares loaded documents by sourceName.
+              sourceName:
+                  '${widget.uuid}/v${widget.version.number}/r${widget.revision}',
               controller: _controller,
               params: PdfViewerParams(
                 backgroundColor: scheme.surfaceContainerHighest,
@@ -2073,6 +2338,7 @@ class _PreviewPager extends StatefulWidget {
   final DocumentVersion version;
 
   const _PreviewPager({
+    super.key,
     required this.api,
     required this.uuid,
     required this.version,
@@ -2127,9 +2393,12 @@ class _PreviewPagerState extends State<_PreviewPager> {
                     ),
                     headers: widget.api.authHeaders,
                     fit: BoxFit.contain,
-                    // Lazy pages may take ~1s to render server-side.
-                    loadingBuilder: (context, child, progress) =>
-                        progress == null
+                    // Lazy pages may take ~1s to render server-side, ODT/ODS
+                    // a few seconds after an edit (LibreOffice). No bytes
+                    // arrive meanwhile, so wait for the decoded frame, not
+                    // for download progress.
+                    frameBuilder: (context, child, frame, wasSync) =>
+                        wasSync || frame != null
                         ? child
                         : const Center(child: CircularProgressIndicator()),
                     errorBuilder: (context, e, st) => Column(

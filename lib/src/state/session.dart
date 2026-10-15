@@ -126,3 +126,14 @@ final documentTypesBySlugProvider = Provider<Map<String, DocumentType>>((ref) {
       ref.watch(documentTypesProvider).value ?? const <DocumentType>[];
   return {for (final t in types) t.slug: t};
 });
+
+/// Whether the document inbox is usable: `GET inbox/` 403s without the
+/// inbox permission (and 404s on servers without the inbox) — hide the tab.
+final inboxAvailableProvider = FutureProvider<bool>((ref) async {
+  try {
+    await ref.watch(apiProvider).inboxItems(limit: 1);
+    return true;
+  } on ApiException {
+    return false;
+  }
+});

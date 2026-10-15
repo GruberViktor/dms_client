@@ -10,6 +10,7 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import '../state/document_feed.dart';
 import '../state/session.dart';
 import '../state/watches.dart';
 import '../util/format.dart';
@@ -88,6 +89,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   final _queryFocus = FocusNode();
   final _showClear = ValueNotifier<bool>(false);
   Timer? _debounce;
+  Timer? _changeDebounce;
 
   // Browsing fills `_docs`, searching fills `_hits`; only one is live at a
   // time (see `_filters.searching`). Both hold exactly the current page.
@@ -114,6 +116,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _changeDebounce?.cancel();
     _queryCtrl.dispose();
     _queryFocus.dispose();
     _showClear.dispose();
@@ -303,7 +306,9 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   /// are refused, or dropping a card back would re-upload it.
   DropOperation _onDropOver(DropOverEvent event) {
     final items = event.session.items;
-    final accept = items.isNotEmpty &&
+    // Off in a hidden tab or under a pushed route.
+    final accept = TickerMode.valuesOf(context).enabled &&
+        items.isNotEmpty &&
         items.every((i) => i.localData == null) &&
         items.every((i) => i.canProvide(Formats.fileUri));
     if (accept != _dragging) setState(() => _dragging = accept);
@@ -365,6 +370,15 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Any change can move a document into or out of the current page, so
+    // every event reloads it (the page stays visible meanwhile).
+    // ponytail: reloads on all changes server-wide; filter by the uuids on
+    // the page plus create/type_change if busy servers make this noisy.
+    ref.listen(documentFeedProvider, (_, next) {
+      if (next.value is! DocumentChange) return;
+      _changeDebounce?.cancel();
+      _changeDebounce = Timer(const Duration(seconds: 1), _reload);
+    });
     return LayoutBuilder(
       builder: (context, constraints) =>
           _build(context, wide: constraints.maxWidth >= _sidebarBreakpoint),
@@ -471,7 +485,8 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                           ],
                         ],
                       ),
-                      if (_dragging) _buildDropOverlay(context),
+                      if (_dragging)
+                        const DropOverlay(label: 'Datei zum Hochladen ablegen'),
                     ],
                   ),
                 ),
@@ -617,41 +632,6 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                   : null,
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDropOverlay(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Container(
-          margin: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: scheme.primaryContainer.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.primary, width: 2),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.file_download_outlined,
-                  size: 48,
-                  color: scheme.onPrimaryContainer,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Datei zum Hochladen ablegen',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: scheme.onPrimaryContainer,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

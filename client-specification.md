@@ -115,7 +115,8 @@ rendered previews (null until then; 1 for images; null for non-visual files).
 When `in_compliance_mode` is true:
 - No delete (server 409s; ideally don't offer the button — show a lock badge
   with `retention_until` instead).
-- No "replace file" on versions — only "upload new version".
+- No "replace file" on released versions — only "upload new version".
+  A version awaiting release stays replaceable.
 - No type change.
 - Archive **is** allowed and is the "get it out of my face" action.
 Metadata/title/notes edits are allowed (they're audited).
@@ -156,11 +157,15 @@ POST /documents/{uuid}/change-type/              {document_type, metadata?} — 
 GET  /documents/{uuid}/timeline/                 → {"events": [...]} (see §6)
 
 GET  /documents/{uuid}/versions/
-POST /documents/{uuid}/versions/                 multipart: file, force? → 201 version
+POST /documents/{uuid}/versions/                 multipart: file, force? → 201 version;
+                                                 while a visible version awaits release,
+                                                 replaces that version's file instead
+                                                 (same number returned, no new version)
 GET  /documents/{uuid}/versions/{n}/
 GET  /documents/{uuid}/versions/{n}/download     bytes, Content-Disposition attachment; audited
 PUT  /documents/{uuid}/versions/{n}/file         multipart: file — replace in place;
                                                  409 compliance_locked in compliance mode
+                                                 (not for a version awaiting release)
 POST /documents/{uuid}/versions/{n}/hide         {reason?} — cannot hide the only visible version
 POST /documents/{uuid}/versions/{n}/unhide
 POST /documents/{uuid}/versions/{n}/re-extract   re-runs OCR
@@ -260,7 +265,9 @@ duplicate-conflict dialog, compliance-aware action visibility.
 "Open & edit" on a version: download to a temp dir, launch the OS default
 application, watch the file (package `watcher`); on change show a diff-aware
 prompt: non-compliance docs → "Replace file in version N or add version N+1?",
-compliance docs → "Upload as version N+1" only. After upload, poll extraction
+compliance docs → "Upload as version N+1" only. While a version awaits
+release, the only choice is "Replace file in version P" (the pending one).
+After upload, poll extraction
 and show the new server-side text diff from the timeline. Handle the app
 still holding the file open (debounce; re-check checksum stability before
 prompting).
@@ -308,4 +315,12 @@ fields, create groups + users, and PUT ACLs on the type roots.
 
 - No user/group management API (Django admin only for now).
 - No "effective permissions for me" endpoint (see §5).
-- No websocket/event push — polling only.
+- Push is one-way and fire-and-forget: `GET /events/` (Server-Sent Events)
+  sends `document_changed` `{"document": uuid, "action": audit code}` for
+  every change to a document the caller may view (not for view/download),
+  with a `: keepalive` comment every 20 s. No history: after a reconnect,
+  reload what is on screen. Inbox state is not pushed — keep polling it.
+- Editing notice (no lock): PUT `/documents/{uuid}/editing/` while editing,
+  repeated at least every 30 s, DELETE when done. The feed relays it as
+  `document_editing` `{"document", "user", "editing", "expires_in"}`; drop
+  an editor not repeated within `expires_in` (60 s).

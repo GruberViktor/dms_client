@@ -29,6 +29,29 @@ token) in flutter_secure_storage.
 - `lib/src/state/notifications.dart` + `state/watches.dart` — unread inbox
   count polled every 45 s (no push channel exists) and the session-cached
   watch set with optimistic document/type toggles.
+- `lib/src/state/document_feed.dart` — live document feed: one SSE
+  connection to `/events/` per session (`parseDocumentFeed` in
+  `api_client.dart`), reconnect after 5 s, then a `DocumentChange.resync`
+  (uuid null) because the server keeps no history. Detail screen reloads on
+  its uuid (500 ms debounce), the list reloads its page on any change (1 s).
+  Extraction polling stays as the fallback while disconnected.
+- `lib/src/state/editors.dart` — editing notices: `EditingAnnouncement`
+  (PUT `…/editing/` now + every 30 s, DELETE on stop) runs while the
+  metadata edit screen is open and for the life of a round-trip edit
+  session; `documentEditorsProvider` collects other users'
+  `document_editing` events (dropped after `expires_in` unless repeated),
+  shown by `widgets/editors_banner.dart` on detail + edit screens. Notice
+  only — the server does not lock.
+- `lib/src/state/deep_links.dart` — `luvi-dms://doc/<uuid>` and
+  `luvi-dms://<tab>` links via `app_links`; `HomeScreen` switches tab / pushes
+  the detail (a link received before login waits). Linux: the runner is single
+  instance (a second launch forwards its link and raises the window), the
+  scheme is registered by `linux/packaging/install.sh`. Android: intent filter
+  in the manifest. Server notification emails carry these links.
+- `lib/src/state/app_update.dart` — once per run, asks the GitHub API for
+  the latest release (repo must be public, no token) and compares with
+  `package_info_plus`; a newer tag shows a banner in the home shell that
+  opens the release page. Failures are silent.
 - `lib/src/screens/` — login, home shell (rail ≥700px / bottom nav),
   document list (compact search field + type dropdown, type tree as an
   inline collapsible sidebar ≥760px content width / overlay drawer below,
@@ -60,7 +83,7 @@ token) in flutter_secure_storage.
   has one (`canDownloadAsPdf` mirrors its `CONVERTED_MIMES`), else the
   original. Used by document cards (current = newest
   released version) and the version rows' download/PDF buttons. Drags carry
-  `fileDragLocalData` so the list screen's upload `DropRegion` ignores them —
+  `fileDragLocalData` so the upload `DropRegion`s (list, inbox) ignore them —
   don't reintroduce desktop_drop, its GTK handlers collide with
   super_native_extensions' on the same view.
 - `lib/src/widgets/timeline.dart` — the §6 vertical timeline: version anchor
@@ -94,10 +117,19 @@ token) in flutter_secure_storage.
   deduped server-side); only an explicit Download/open-externally action may
   call `…/download` or `…/download/pdf` (needs `download`, logged as one).
 - Detail-screen preview: PDFs (and odt/ods/docx/xlsx/drawio via `…/view/pdf`) render
-  in-app with pdfrx/pdfium — real text layer, select/copy. Other formats,
-  and PDF fetch failures, use the server preview images
-  (`/preview/?size=thumb|preview&page=N`, token header); 404 → mime-type
-  icon fallback. List thumbnails always use the server previews.
+  in-app with pdfrx/pdfium — real text layer, select/copy. Markdown
+  (`isMarkdown()` — extension decides, libmagic sniffs `.md` as `text/plain`)
+  renders with flutter_markdown_plus from `Document.content`: the extractor
+  stores text files verbatim, so the extracted text *is* the source and no
+  extra request is made. Because `content` is document-level it only covers
+  the effective released version — a pending markdown proposal falls through
+  to the icon. Other formats, and PDF fetch failures, use the server preview
+  images (`/preview/?size=thumb|preview&page=N`, token header); 404 →
+  mime-type icon fallback. List thumbnails always use the server previews.
+  Preview URLs never change across edits (server sends no-cache + ETag), so
+  when a detail reload shows a changed `Document.previewRevision` it lands in
+  `ApiClient.previewRevisions` → `&r=` on every preview URL of that uuid and
+  a `view/pdf` refetch.
 - Compliance mode: hide delete/replace-file actions, show the lock badge;
   archive stays available.
 - Branding: display name "LUVI Docs" (Android label, GTK/Win32 window title,
@@ -142,7 +174,9 @@ optimistic release buttons (`release_version` atom; plain 403 → §5 deny,
 `_fourEyesBlocked`), the timeline renders the live `proposed_diff` ("what
 changes if released") on pending version nodes and `version_release` audit
 rows, and replace-file warns that it resets a released version to pending
-(§7). Reject = the existing hide flow. No pending-approvals queue exists
+(§7). Reject = the existing hide flow. List/search rows carry
+`has_pending_release` (server addition, not in the spec yet) → the same
+amber `PendingReleaseBadge` on the document card. No pending-approvals queue exists
 server-side (§10).
 
 Storage-binding hand-off implemented: retention policies carry a required
@@ -163,3 +197,20 @@ and there is no group listing API (spec §10) — groups are entered as raw ids.
 Dev login: `claude` / `claude_password` on `http://localhost:8000`
 (superuser). Server holds demo data: a "Roundtrip test" document (type
 scratch, 2 versions) and a "By batch (edited)" index.
+
+Document inbox hand-off implemented (`screens/inbox_screen.dart`): "Eingang"
+tab (shown only when the `inboxAvailableProvider` probe of `GET inbox/`
+succeeds — "Posteingang" stays the notification inbox), multi-file upload
+by picker or drag & drop (one request), status filter chips. The list
+polls every 4 s while the server reports any `processing` item (asked via
+`?status=processing`, not read off the visible rows — under the "Bereit"
+filter those rows are not listed). The review
+screen shows the original file (`inbox/{uuid}/file/` — PDF/image; other
+formats show the extracted `content`) next to a form pre-filled from
+`suggestion` (marked "Vorschlag – bitte prüfen" via
+`MetadataFormFields.suggestedKeys`); type change keeps same-key values;
+non-empty `duplicate_of` shows a warning and accept then sends `force`.
+Two accept buttons: "Übernehmen & öffnen" opens the new document,
+"Übernehmen & weiter" moves to the next `ready` item (none → back to the list).
+`DocumentType.description` is edited in the type editor and shown in the
+inbox type picker.

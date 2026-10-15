@@ -23,6 +23,7 @@ class DocumentCard extends StatefulWidget {
   final String? mimeType;
   final bool archived;
   final bool inComplianceMode;
+  final bool hasPendingRelease;
   final VoidCallback onOpen;
 
   const DocumentCard._({
@@ -35,6 +36,7 @@ class DocumentCard extends StatefulWidget {
     required this.mimeType,
     required this.archived,
     required this.inComplianceMode,
+    required this.hasPendingRelease,
     required this.onOpen,
   });
 
@@ -54,6 +56,7 @@ class DocumentCard extends StatefulWidget {
           mimeType: document.mimeType,
           archived: document.archived,
           inComplianceMode: document.inComplianceMode,
+          hasPendingRelease: document.hasPendingRelease,
           onOpen: onOpen,
         );
 
@@ -73,6 +76,7 @@ class DocumentCard extends StatefulWidget {
           mimeType: hit.mimeType,
           archived: hit.archived,
           inComplianceMode: false,
+          hasPendingRelease: hit.hasPendingRelease,
           onOpen: onOpen,
         );
 
@@ -178,7 +182,7 @@ class _DocumentCardState extends State<DocumentCard> {
                   if (d.inComplianceMode || d.archived)
                     Positioned(
                       top: 6,
-                      right: 6,
+                      left: 6,
                       child: Row(
                         children: [
                           if (d.inComplianceMode)
@@ -192,6 +196,18 @@ class _DocumentCardState extends State<DocumentCard> {
                               tooltip: 'Archiviert',
                             ),
                         ],
+                      ),
+                    ),
+                  // the card clips the band's ends
+                  if (d.hasPendingRelease)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: CornerBanner(
+                        scale: 1.2,
+                        message: 'Freigabe',
+                        color: scheme.tertiary,
+                        textColor: scheme.onTertiary,
                       ),
                     ),
                 ],

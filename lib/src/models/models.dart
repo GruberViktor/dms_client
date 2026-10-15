@@ -1,6 +1,8 @@
 /// Domain models for the DMS API (see client-specification.md §3/§4).
 library;
 
+import 'dart:convert';
+
 class Paginated<T> {
   final int count;
   final String? next;
@@ -107,6 +109,9 @@ class DocumentType {
   final String? approvalMode; // none | required | four_eyes | null
   final List<MetadataFieldDef> metadataFields;
 
+  /// Free text the inbox classifier reads; shown in type pickers.
+  final String description;
+
   DocumentType({
     required this.slug,
     required this.name,
@@ -117,6 +122,7 @@ class DocumentType {
     required this.isActive,
     this.approvalMode,
     required this.metadataFields,
+    this.description = '',
   });
 
   factory DocumentType.fromJson(Map<String, dynamic> json) => DocumentType(
@@ -133,6 +139,7 @@ class DocumentType {
         metadataFields: ((json['metadata_fields'] as List?) ?? const [])
             .map((e) => MetadataFieldDef.fromJson(e as Map<String, dynamic>))
             .toList(),
+        description: json['description'] as String? ?? '',
       );
 }
 
@@ -304,6 +311,8 @@ class Document {
   final List<DocumentVersion> versions;
   // Also present on list/search rows; null when all versions are hidden.
   final String? mimeType;
+  // List/search rows: a visible version awaits release.
+  final bool hasPendingRelease;
 
   Document({
     required this.uuid,
@@ -320,6 +329,7 @@ class Document {
     required this.content,
     required this.mimeType,
     required this.versions,
+    this.hasPendingRelease = false,
   });
 
   factory Document.fromJson(Map<String, dynamic> json) => Document(
@@ -339,6 +349,20 @@ class Document {
         versions: ((json['versions'] as List?) ?? const [])
             .map((e) => DocumentVersion.fromJson(e as Map<String, dynamic>))
             .toList(),
+        hasPendingRelease: _asBool(json['has_pending_release']),
+      );
+
+  /// Changes whenever the server's renderings (preview images, `view/pdf`)
+  /// may have changed: file replaced, version uploaded/released/hidden,
+  /// title/type/metadata edited. Extraction progress does not count, so the
+  /// OCR poll does not refetch previews. Detail rows only (list rows carry no
+  /// versions).
+  int get previewRevision => Object.hash(
+        title,
+        documentType,
+        jsonEncode(metadata),
+        Object.hashAll(versions.map((v) => Object.hash(v.number,
+            v.checksumSha256, v.approvalStatus, v.releasedAt, v.isHidden))),
       );
 
   /// Newest visible *released* version — "the document". Pending versions
@@ -608,6 +632,7 @@ class SearchHit {
   final DateTime? dateAdded;
   final bool archived;
   final String? mimeType; // null when all versions are hidden
+  final bool hasPendingRelease;
   final double? rank;
   final String headline; // contains <b>..</b> around matches
 
@@ -619,6 +644,7 @@ class SearchHit {
     required this.dateAdded,
     required this.archived,
     required this.mimeType,
+    this.hasPendingRelease = false,
     required this.rank,
     required this.headline,
   });
@@ -633,6 +659,7 @@ class SearchHit {
             : null,
         archived: _asBool(json['archived']),
         mimeType: json['mime_type'] as String?,
+        hasPendingRelease: _asBool(json['has_pending_release']),
         rank: (json['rank'] as num?)?.toDouble(),
         headline: (json['headline'] as String?) ?? '',
       );
@@ -965,6 +992,46 @@ class UserSuggestion {
       );
 }
 
+/// One event of the live document feed (`/events/`).
+sealed class FeedEvent {}
+
+/// `document_changed`. [uuid] is null for a resync: the feed reconnected
+/// after a gap in which events may have been lost, so everything on screen
+/// must be reloaded.
+class DocumentChange extends FeedEvent {
+  final String? uuid;
+  final String action; // audit action code, e.g. comment_add
+
+  DocumentChange(this.uuid, this.action);
+
+  // Not const: two resyncs in a row must still be two distinct events.
+  DocumentChange.resync() : this(null, 'resync');
+}
+
+/// `document_editing`: [user] started ([editing] true, valid for
+/// [expiresIn] unless repeated) or stopped editing [uuid].
+class DocumentEditing extends FeedEvent {
+  final String uuid;
+  final String user;
+  final bool editing;
+  final Duration expiresIn;
+
+  DocumentEditing({
+    required this.uuid,
+    required this.user,
+    required this.editing,
+    required this.expiresIn,
+  });
+
+  factory DocumentEditing.fromJson(Map<String, dynamic> json) =>
+      DocumentEditing(
+        uuid: json['document'] as String,
+        user: json['user'] as String,
+        editing: _asBool(json['editing']),
+        expiresIn: Duration(seconds: (json['expires_in'] as num).toInt()),
+      );
+}
+
 class CurrentUser {
   final int id;
   final String username;
@@ -988,5 +1055,94 @@ class CurrentUser {
         groups: ((json['groups'] as List?) ?? const [])
             .map((e) => e is Map ? '${e['name']}' : '$e')
             .toList(),
+      );
+}
+
+/// Document inbox item (inbox hand-off): an uploaded file awaiting a human
+/// accept/reject. status: processing | ready | failed | accepted | rejected.
+class InboxItem {
+  final String uuid;
+  final String status;
+  final String originalFilename;
+  final String? mimeType;
+  final int size;
+  final List<String> duplicateOf;
+  final String content;
+  final InboxSuggestion? suggestion; // null = server sent `{}`
+  final String? error;
+  final String? uploadedBy;
+  final DateTime? uploadedAt;
+  final String? reviewedBy;
+  final String? document;
+
+  InboxItem({
+    required this.uuid,
+    required this.status,
+    required this.originalFilename,
+    this.mimeType,
+    this.size = 0,
+    this.duplicateOf = const [],
+    this.content = '',
+    this.suggestion,
+    this.error,
+    this.uploadedBy,
+    this.uploadedAt,
+    this.reviewedBy,
+    this.document,
+  });
+
+  bool get isOpen => status == 'processing' || status == 'ready' || status == 'failed';
+
+  factory InboxItem.fromJson(Map<String, dynamic> json) {
+    final s = json['suggestion'];
+    return InboxItem(
+      uuid: json['uuid'] as String,
+      status: json['status'] as String,
+      originalFilename: json['original_filename'] as String? ?? '',
+      mimeType: json['mime_type'] as String?,
+      size: (json['size'] as num?)?.toInt() ?? 0,
+      duplicateOf: ((json['duplicate_of'] as List?) ?? const [])
+          .map((e) => '$e')
+          .toList(),
+      content: json['content'] as String? ?? '',
+      suggestion: s is Map && s.isNotEmpty
+          ? InboxSuggestion.fromJson(s.cast<String, dynamic>())
+          : null,
+      error: json['error'] as String?,
+      uploadedBy: json['uploaded_by'] as String?,
+      uploadedAt: DateTime.tryParse(json['uploaded_at'] as String? ?? ''),
+      reviewedBy: json['reviewed_by'] as String?,
+      document: json['document'] as String?,
+    );
+  }
+}
+
+class InboxSuggestion {
+  final String? documentType;
+  final double? confidence;
+  final List<String> alternatives;
+  final String title;
+  final String? documentDate;
+  final Map<String, dynamic> metadata;
+
+  InboxSuggestion({
+    this.documentType,
+    this.confidence,
+    this.alternatives = const [],
+    this.title = '',
+    this.documentDate,
+    this.metadata = const {},
+  });
+
+  factory InboxSuggestion.fromJson(Map<String, dynamic> json) => InboxSuggestion(
+        documentType: json['document_type'] as String?,
+        confidence: (json['confidence'] as num?)?.toDouble(),
+        alternatives: ((json['alternatives'] as List?) ?? const [])
+            .map((e) => '$e')
+            .toList(),
+        title: json['title'] as String? ?? '',
+        documentDate: json['document_date'] as String?,
+        metadata:
+            ((json['metadata'] as Map?) ?? const {}).cast<String, dynamic>(),
       );
 }

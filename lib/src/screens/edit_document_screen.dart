@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
+import '../state/editors.dart';
 import '../state/permissions.dart';
 import '../state/session.dart';
 import '../util/format.dart';
+import '../widgets/editors_banner.dart';
 import '../widgets/metadata_form.dart';
 
 /// Edit title/notes/document_date/metadata via PATCH (spec §4).
@@ -30,9 +32,18 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
   final _metaCtrl = MetadataFormController();
   late String? _documentDate = widget.document.documentDate;
   bool _busy = false;
+  late final EditingAnnouncement _announcement;
+
+  @override
+  void initState() {
+    super.initState();
+    _announcement =
+        EditingAnnouncement(ref.read(apiProvider), widget.document.uuid);
+  }
 
   @override
   void dispose() {
+    _announcement.stop();
     _titleCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
@@ -138,6 +149,9 @@ class _EditDocumentScreenState extends ConsumerState<EditDocumentScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                EditorsBanner(
+                    uuid: widget.document.uuid,
+                    padding: const EdgeInsets.only(bottom: 16)),
                 TextFormField(
                   controller: _titleCtrl,
                   decoration: const InputDecoration(

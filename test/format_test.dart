@@ -35,4 +35,21 @@ void main() {
       expect(formatMonetary('n/a'), 'n/a');
     });
   });
+
+  group('isMarkdown', () {
+    test('recognises markdown extensions on textual mimes', () {
+      expect(isMarkdown('text/plain', 'notes.md'), isTrue);
+      expect(isMarkdown('text/markdown', 'README.MARKDOWN'), isTrue);
+      expect(isMarkdown('text/plain', 'notes.mkd'), isTrue);
+      // version rows without a mime (all versions hidden) still count
+      expect(isMarkdown(null, 'notes.md'), isTrue);
+    });
+
+    test('rejects other formats and other text files', () {
+      expect(isMarkdown('text/plain', 'notes.txt'), isFalse);
+      expect(isMarkdown('application/pdf', 'notes.md'), isFalse);
+      expect(isMarkdown('text/csv', 'table.csv'), isFalse);
+      expect(isMarkdown('text/plain', null), isFalse);
+    });
+  });
 }
