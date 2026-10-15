@@ -47,14 +47,22 @@ String formatBytes(int bytes) {
 /// Substring match: servers may append parameters (e.g. `; charset=binary`).
 bool isPdfMime(String? mime) => (mime ?? '').contains('application/pdf');
 
-/// Formats the server can convert on the fly via
-/// GET /documents/{uuid}/versions/{n}/download/pdf (odt and docx).
+/// Formats the server converts on the fly for `…/view/pdf` and
+/// `…/download/pdf`: odt/ods, docx/xlsx (LibreOffice) and draw.io diagrams
+/// — mirrors the server's `CONVERTED_MIMES`. Anything else 404s there.
 /// Substring match: servers may append parameters (e.g. `; charset=binary`).
 bool canDownloadAsPdf(String? mime) {
   final m = mime ?? '';
   return m.contains('officedocument.wordprocessingml.document') ||
-      m.contains('opendocument.text');
+      m.contains('officedocument.spreadsheetml.sheet') ||
+      m.contains('opendocument.text') ||
+      m.contains('opendocument.spreadsheet') ||
+      m.contains('vnd.jgraph.mxfile');
 }
+
+/// Whether `…/download/pdf` (and `…/view/pdf`) has something to serve: PDF
+/// originals as-is, convertible formats rendered.
+bool hasPdfRendition(String? mime) => isPdfMime(mime) || canDownloadAsPdf(mime);
 
 /// "report.docx" → "report.pdf" (extension swapped, not appended).
 String pdfFilename(String name) {

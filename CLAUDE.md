@@ -49,6 +49,20 @@ token) in flutter_secure_storage.
   entered/cleared unless the user picked a sort themselves; metadata keys
   (`metadata__<key>`) come from the selected type's merged field set. Server
   400 `invalid_ordering` falls back to the default instead of erroring out.
+- `lib/src/widgets/file_drag.dart` — `FileDragSource` (super_drag_and_drop):
+  drag a file out to mail drafts/file managers (desktop only). The drag
+  starts at once and the download (via the *download* route, audited — also
+  for cancelled drags) starts with it in the background. Files land in the
+  XDG Downloads folder, not /tmp — snap/flatpak Thunderbird has a private
+  /tmp and attaches 0 bytes; existing files there are never overwritten; the `file://` URI is a *lazy* value the target's data
+  request awaits. That future must never throw (native side blocks on it).
+  Every drag (`dragSpecFor`) hands out the PDF rendition where the server
+  has one (`canDownloadAsPdf` mirrors its `CONVERTED_MIMES`), else the
+  original. Used by document cards (current = newest
+  released version) and the version rows' download/PDF buttons. Drags carry
+  `fileDragLocalData` so the list screen's upload `DropRegion` ignores them —
+  don't reintroduce desktop_drop, its GTK handlers collide with
+  super_native_extensions' on the same view.
 - `lib/src/widgets/timeline.dart` — the §6 vertical timeline: version anchor
   cards, grouped view/download events, collapsed ±N diff chips, hidden
   versions struck through, comment nodes (soft-deleted ones stay, struck
@@ -79,7 +93,7 @@ token) in flutter_secure_storage.
   `…/versions/{n}/view/pdf` (needs only `view`, logged as a view, seek Ranges
   deduped server-side); only an explicit Download/open-externally action may
   call `…/download` or `…/download/pdf` (needs `download`, logged as one).
-- Detail-screen preview: PDFs (and odt/docx via `…/view/pdf`) render
+- Detail-screen preview: PDFs (and odt/ods/docx/xlsx/drawio via `…/view/pdf`) render
   in-app with pdfrx/pdfium — real text layer, select/copy. Other formats,
   and PDF fetch failures, use the server preview images
   (`/preview/?size=thumb|preview&page=N`, token header); 404 → mime-type
@@ -110,8 +124,10 @@ Notifications & watches hand-off implemented: Inbox tab with polled unread
 badge, watch bells on document detail + type-tree nodes (a type watch covers
 the subtree), @-mention autocomplete in the comment composer (`can_view:
 false` users struck through), mention tokens styled in comment bodies.
-odt/docx versions can be fetched as PDF (`…/versions/{n}/download/pdf`) via
-the pdf icon on list cards, the detail top bar, and version rows. Note the
+odt/ods/docx/xlsx/drawio versions can be fetched as PDF
+(`…/versions/{n}/download/pdf`) via the pdf icon on list cards, the detail
+top bar, and version rows; PDF originals get the icon too for a uniform UI
+(the route serves them as-is — `hasPdfRendition`). Note the
 spec prose calling `mime_type` detail-only is outdated: the server now sends
 it on document list and search rows too (null when all versions are hidden).
 

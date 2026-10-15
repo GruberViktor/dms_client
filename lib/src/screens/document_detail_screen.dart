@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../util/open_file.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -18,7 +17,9 @@ import '../state/permissions.dart';
 import '../state/session.dart';
 import '../state/watches.dart';
 import '../util/format.dart';
+import '../util/version_files.dart';
 import '../widgets/common.dart';
+import '../widgets/file_drag.dart';
 import '../widgets/timeline.dart';
 import 'edit_document_screen.dart';
 
@@ -198,29 +199,33 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
     final doc = _doc!;
     setState(() => _busy = true);
     try {
-      final api = ref.read(apiProvider);
-      final bytes = asPdf
-          ? await api.downloadVersionPdf(doc.uuid, v.number)
-          : await api.downloadVersion(doc.uuid, v.number);
-      final dir = await getTemporaryDirectory();
-      var safeName = v.originalFilename.isNotEmpty
-          ? v.originalFilename.replaceAll(RegExp(r'[/\\]'), '_')
-          : 'document';
-      if (asPdf) safeName = pdfFilename(safeName);
-      final file = File('${dir.path}/dms/${doc.uuid}/v${v.number}/$safeName');
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(bytes);
+      final file = await downloadVersionToTemp(
+        ref.read(apiProvider),
+        doc.uuid,
+        v,
+        asPdf: asPdf,
+      );
       final opened = await openExternally(file.path);
       if (mounted && !opened) {
         showSnack(context, 'Gespeichert unter ${file.path}');
       }
-    } on ApiException catch (e) {
-      if (e.isForbidden) _recordDenied('download');
-      if (mounted) showSnack(context, e.detail);
     } catch (e) {
-      if (mounted) showSnack(context, 'Download fehlgeschlagen: $e');
+      _onDownloadError(e);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Drag source for a version row's download buttons.
+  FileDragSpec _dragSpec(DocumentVersion v) =>
+      dragSpecFor(ref.read(apiProvider), _doc!.uuid, v);
+
+  void _onDownloadError(Object e) {
+    if (e is ApiException) {
+      if (e.isForbidden) _recordDenied('download');
+      if (mounted) showSnack(context, e.detail);
+    } else if (mounted) {
+      showSnack(context, 'Download fehlgeschlagen: $e');
     }
   }
 
@@ -795,6 +800,8 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
           onDownload: _busy ? null : _downloadAndOpen,
           onDownloadPdf:
               _busy ? null : (v) => _downloadAndOpen(v, asPdf: true),
+          onDragFile: _busy ? null : _dragSpec,
+          onDragError: _onDownloadError,
           onOpenEdit: (_busy || !_isDesktop) ? null : _openAndEdit,
           onUploadVersion: (_busy || !canUpload)
               ? null
@@ -845,16 +852,16 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
       ],
     );
 
-    // PDFs (and odt/docx via server-side conversion) render in-app with a
-    // real text layer; everything else uses the server preview images.
+    // PDFs (and office/draw.io via server-side conversion) render in-app
+    // with a real text layer; everything else uses the server preview
+    // images.
     // Preview the released content; if none exists (only-released version
     // replaced, §7), fall back to the pending proposal — its per-version
     // preview is open to anyone with `view` (§5).
     final previewVersion = current ?? pending;
     final preview = previewVersion == null
         ? const SizedBox.shrink()
-        : (isPdfMime(previewVersion.mimeType) ||
-                canDownloadAsPdf(previewVersion.mimeType))
+        : hasPdfRendition(previewVersion.mimeType)
         ? _PdfPreview(
             api: ref.read(apiProvider),
             uuid: doc.uuid,
@@ -900,7 +907,7 @@ class _DocumentDetailScreenState extends ConsumerState<DocumentDetailScreen> {
               icon: const Icon(Icons.open_in_new),
               onPressed: _busy ? null : () => _downloadAndOpen(current),
             ),
-          if (current != null && canDownloadAsPdf(current.mimeType))
+          if (current != null && hasPdfRendition(current.mimeType))
             IconButton(
               tooltip: 'Als PDF herunterladen',
               icon: const Icon(Icons.picture_as_pdf_outlined),
@@ -1716,6 +1723,8 @@ class _VersionsCard extends StatelessWidget {
   final Document doc;
   final void Function(DocumentVersion)? onDownload;
   final void Function(DocumentVersion)? onDownloadPdf;
+  final FileDragSpec Function(DocumentVersion)? onDragFile;
+  final void Function(Object error) onDragError;
   final void Function(DocumentVersion)? onOpenEdit;
   final VoidCallback? onUploadVersion;
   final void Function(DocumentVersion)? onReplaceFile;
@@ -1729,6 +1738,8 @@ class _VersionsCard extends StatelessWidget {
     required this.doc,
     required this.onDownload,
     required this.onDownloadPdf,
+    required this.onDragFile,
+    required this.onDragError,
     required this.onOpenEdit,
     required this.onUploadVersion,
     required this.onReplaceFile,
@@ -1738,6 +1749,35 @@ class _VersionsCard extends StatelessWidget {
     required this.onRelease,
     required this.fourEyesBlocked,
   });
+
+  /// Download button that can also be dragged out as the file itself
+  /// (desktop) — the hint goes into the tooltip.
+  Widget _draggableButton(
+    DocumentVersion v, {
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+  }) {
+    final drag = onDragFile;
+    return FileDragSource(
+      enabled: drag != null,
+      prepare: () async => drag!(v),
+      onError: onDragError,
+      builder: (context, busy) => IconButton(
+        tooltip: fileDragSupported && drag != null
+            ? '$tooltip – oder herausziehen'
+            : tooltip,
+        icon: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(icon),
+        onPressed: busy ? null : onPressed,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1839,17 +1879,19 @@ class _VersionsCard extends StatelessWidget {
                           icon: const Icon(Icons.find_replace, size: 20),
                           onPressed: () => onReplaceFile!(v),
                         ),
-                      IconButton(
+                      _draggableButton(
+                        v,
                         tooltip: 'Herunterladen & öffnen',
-                        icon: const Icon(Icons.file_download_outlined),
+                        icon: Icons.file_download_outlined,
                         onPressed: onDownload != null
                             ? () => onDownload!(v)
                             : null,
                       ),
-                      if (canDownloadAsPdf(v.mimeType))
-                        IconButton(
+                      if (hasPdfRendition(v.mimeType))
+                        _draggableButton(
+                          v,
                           tooltip: 'Als PDF herunterladen',
-                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          icon: Icons.picture_as_pdf_outlined,
                           onPressed: onDownloadPdf != null
                               ? () => onDownloadPdf!(v)
                               : null,
@@ -1926,8 +1968,8 @@ class _VersionsCard extends StatelessWidget {
 }
 
 /// In-app pdfium viewer (pdfrx) with a real text layer: select, copy,
-/// zoom. Native PDFs load their original bytes; odt/docx go through the
-/// server's on-the-fly PDF conversion. If the fetch fails we fall back to
+/// zoom. Native PDFs load their original bytes; office/draw.io go through
+/// the server's on-the-fly PDF conversion. If the fetch fails we fall back to
 /// the server-rendered preview images.
 class _PdfPreview extends StatefulWidget {
   final ApiClient api;

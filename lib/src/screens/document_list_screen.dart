@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:decimal/decimal.dart';
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
@@ -297,33 +298,46 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
     }
   }
 
-  Future<void> _onDrop(DropDoneDetails details) async {
+  /// Files dragged in from outside start an upload. The app's own drags
+  /// (cards, version buttons — see `FileDragSource`) carry local data and
+  /// are refused, or dropping a card back would re-upload it.
+  DropOperation _onDropOver(DropOverEvent event) {
+    final items = event.session.items;
+    final accept = items.isNotEmpty &&
+        items.every((i) => i.localData == null) &&
+        items.every((i) => i.canProvide(Formats.fileUri));
+    if (accept != _dragging) setState(() => _dragging = accept);
+    return accept ? DropOperation.copy : DropOperation.none;
+  }
+
+  Future<void> _onPerformDrop(PerformDropEvent event) async {
     setState(() => _dragging = false);
-    final items = details.files;
-    if (items.isEmpty) return;
+    final items = event.session.items;
     if (items.length > 1) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Bitte nur eine Datei auf einmal ablegen.'),
-          ),
-        );
+      showSnack(context, 'Bitte nur eine Datei auf einmal ablegen.');
       return;
     }
-    final x = items.first;
-    // On desktop the dropped file has a real path; read bytes as a fallback
-    // for platforms where it does not (e.g. web).
-    final Uint8List? bytes = x.path.isEmpty ? await x.readAsBytes() : null;
-    if (!mounted) return;
+    // The value must be requested before onPerformDrop returns, but the
+    // upload screen must not block it — hence the callback.
+    items.first.dataReader?.getValue<Uri>(
+      Formats.fileUri,
+      (uri) {
+        if (uri != null && mounted) _uploadDropped(File.fromUri(uri));
+      },
+      onError: (e) {
+        if (mounted) showSnack(context, 'Datei konnte nicht gelesen werden: $e');
+      },
+    );
+  }
+
+  Future<void> _uploadDropped(File file) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => UploadScreen(
           initialTypeSlug: _filters.typeSlug,
           initialFile: PickedFile(
-            filename: x.name,
-            path: x.path.isEmpty ? null : x.path,
-            bytes: bytes,
+            filename: file.uri.pathSegments.last,
+            path: file.path,
           ),
         ),
       ),
@@ -420,10 +434,12 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     ),
                   ),
                 ),
-          body: DropTarget(
-            onDragEntered: (_) => setState(() => _dragging = true),
-            onDragExited: (_) => setState(() => _dragging = false),
-            onDragDone: _onDrop,
+          body: DropRegion(
+            formats: const [Formats.fileUri],
+            hitTestBehavior: HitTestBehavior.opaque,
+            onDropOver: _onDropOver,
+            onDropLeave: (_) => setState(() => _dragging = false),
+            onPerformDrop: _onPerformDrop,
             child: Row(
               children: [
                 if (wide) _buildSidebar(typesAsync),

@@ -52,9 +52,9 @@ dependencies:
   pdf: ^3.13.0
   watcher: ^1.2.1
   crypto: ^3.0.7
-  desktop_drop: ^0.7.1
   calendar_date_picker2: ^3.0.0
   pdfrx: ^2.4.7
+  super_drag_and_drop: ^0.9.1
 
 dev_dependencies:
   flutter_test:

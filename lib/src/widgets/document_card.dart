@@ -1,16 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import '../util/open_file.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../api/api_client.dart';
 import '../models/models.dart';
 import '../util/format.dart';
+import '../util/version_files.dart';
 import 'common.dart';
+import 'file_drag.dart';
 
 /// Paperless-style document tile: preview header, title, type/date meta and
-/// open/download actions.
+/// open/download actions. On desktop the whole tile can be dragged out as
+/// the current version — as PDF wherever the server has a rendition.
 ///
 /// Built from a list [Document] or from a [SearchHit] — the search payload
 /// carries no compliance flag, so hits never show the lock badge.
@@ -95,28 +95,35 @@ class _DocumentCardState extends State<DocumentCard> {
 
   bool get _busy => _busyAction != null;
 
-  /// The list payload carries no versions, so resolve the current one first.
+  /// The list payload carries no versions, so resolve the current one —
+  /// newest visible *released* version; a pending proposal is skipped.
+  /// Null (after a snack) when there is none.
+  Future<DocumentVersion?> _currentVersion() async {
+    final v = (await widget.api.document(widget.uuid)).currentVersion;
+    if (v == null && mounted) {
+      showSnack(context, 'Keine herunterladbare Version vorhanden.');
+    }
+    return v;
+  }
+
+  /// Drag source (file goes to the Downloads folder).
+  Future<FileDragSpec?> _prepareDrag() async {
+    final v = await _currentVersion();
+    if (v == null) return null;
+    return dragSpecFor(widget.api, widget.uuid, v);
+  }
+
   Future<void> _download({bool asPdf = false}) async {
-    final uuid = widget.uuid;
     setState(() => _busyAction = asPdf ? 'pdf' : 'file');
     try {
-      final full = await widget.api.document(uuid);
-      final v = full.currentVersion;
-      if (v == null) {
-        if (mounted) showSnack(context, 'Keine herunterladbare Version vorhanden.');
-        return;
-      }
-      final bytes = asPdf
-          ? await widget.api.downloadVersionPdf(uuid, v.number)
-          : await widget.api.downloadVersion(uuid, v.number);
-      final dir = await getTemporaryDirectory();
-      var safeName = v.originalFilename.isNotEmpty
-          ? v.originalFilename.replaceAll(RegExp(r'[/\\]'), '_')
-          : 'document';
-      if (asPdf) safeName = pdfFilename(safeName);
-      final file = File('${dir.path}/dms/$uuid/v${v.number}/$safeName');
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(bytes);
+      final v = await _currentVersion();
+      if (v == null) return;
+      final file = await downloadVersionToTemp(
+        widget.api,
+        widget.uuid,
+        v,
+        asPdf: asPdf,
+      );
       final opened = await openExternally(file.path);
       if (mounted && !opened) {
         showSnack(context, 'Gespeichert unter ${file.path}');
@@ -132,6 +139,14 @@ class _DocumentCardState extends State<DocumentCard> {
 
   @override
   Widget build(BuildContext context) {
+    return FileDragSource(
+      enabled: !_busy,
+      prepare: _prepareDrag,
+      builder: (context, busy) => _buildCard(context, busy),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, bool dragBusy) {
     final d = widget;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -153,6 +168,13 @@ class _DocumentCardState extends State<DocumentCard> {
                     uuid: d.uuid,
                     mime: d.mimeType,
                   ),
+                  if (dragBusy)
+                    const Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: LinearProgressIndicator(minHeight: 3),
+                    ),
                   if (d.inComplianceMode || d.archived)
                     Positioned(
                       top: 6,
@@ -227,9 +249,9 @@ class _DocumentCardState extends State<DocumentCard> {
                       onPressed: _busy ? null : _download,
                     ),
                   ),
-                  // Only convertible formats (odt/docx); mime_type is null
-                  // when all versions are hidden.
-                  if (canDownloadAsPdf(d.mimeType))
+                  // PDFs and convertible formats (office, draw.io);
+                  // mime_type is null when all versions are hidden.
+                  if (hasPdfRendition(d.mimeType))
                     Expanded(
                       child: IconButton(
                         tooltip: 'Als PDF herunterladen',

@@ -320,7 +320,8 @@ class ApiClient {
     return Uint8List.fromList(res.data!);
   }
 
-  /// Server-side conversion to PDF — only for odt/docx versions. Audited as
+  /// Server-side conversion to PDF — only for [canDownloadAsPdf] formats
+  /// (PDF originals come back as-is). Audited as
   /// a download; use [viewVersionPdf] for anything shown inside the app.
   Future<Uint8List> downloadVersionPdf(String uuid, int number) async {
     final res = await _request<List<int>>(
